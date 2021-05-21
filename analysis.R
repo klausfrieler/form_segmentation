@@ -24,6 +24,7 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 2, weights = NULL, star
 }
 
 setup_workspace <- function(result_dir = "data/part2"){
+  messagef("Setting up workspace from %s", result_dir)
   part2_all <- MSM::read_MSM_data(result_dir, expand_markers = T) %>% 
     filter(lubridate::day(time_ended) > 20)
   part2_all <- part2_all %>% 

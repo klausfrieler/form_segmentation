@@ -12,7 +12,8 @@ library(shinythemes)
 source("analysis.R")
 
 #load("data/musem_workspace.rda")
-setup_workspace()
+result_dir <- "data/part2"
+setup_workspace(result_dir)
 
 get_intro_text <- function(){
   div(h4("Welcome to Form Segmentation App"), 
@@ -57,17 +58,19 @@ ui <- fluidPage(
 # Define server logic required to draw a plot
 server <- function(input, output, session) {
    message("*** STARTING APP***")
+   check_data <- reactiveFileReader(1000, session, result_dir, setup_workspace)
    output$introduction <- renderUI({
      get_intro_text()
    })
    output$data_stats <- renderTable({
+      check_data()
      part2_meta %>% mutate(n = 1:n()) %>% select(n, everything())
    })
    output$marker_plot <- renderPlot({
-     if(input$plot_type == "lines"){
-        plot_marker() 
-     }
-     else{
+      check_data()
+      if(input$plot_type == "lines"){
+         plot_marker() 
+      } else{
        plot_gaussification()
      }
    })
