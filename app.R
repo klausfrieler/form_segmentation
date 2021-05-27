@@ -12,15 +12,21 @@ library(shinythemes)
 source("analysis.R")
 
 #load("data/musem_workspace.rda")
-result_dir <- "data/part2"
-setup_workspace(result_dir)
+part1_result_dir <- "data/part1"
+part2_result_dir <- "data/part2"
+setup_workspace(part1_result_dir, part2_result_dir)
+stimulus_choices <- sort(unique(both_parts$stimulus))
+names(stimulus_choices) <- stimulus_choices %>% 
+   str_replace(".wav", "") %>% 
+   str_replace("part", "Part ") %>% 
+   str_replace("_", ": ") 
 
 get_intro_text <- function(){
-  div(h4("Welcome to Form Segmentation App"), 
-         p("This app allows you visualize the data from a study on form perception in classical music",
+  div(h4("Welcome to the Form Segmentation Analysis App"), 
+         p("This app allows you visualize and inspect the data from a study on form and phrase perception in classical music",
            "that was carried out by the Max Planck Institute for empirical Aesthetics, Frankfurt/M., Germany"),
       p("Have fun!"),
-      style = "width:50%:text-align:justify")
+      style = "width:50%;text-align:justify")
 }
 input_width <- 300
 # Define UI for application that draws a histogram
@@ -34,6 +40,7 @@ ui <- fluidPage(
    sidebarLayout(
       sidebarPanel(
         tags$style("#mode:{background-color: #72b573}"),
+        selectInput("stimulus", "Stimulus:", stimulus_choices, selected = stimulus_choices[1]), 
         selectInput("plot_type", "Plot Type:", c("Lines" = "lines", "Gaussification" = "gauss"), selected = "lines"), 
 
         width = 2
@@ -46,7 +53,8 @@ ui <- fluidPage(
           tabPanel("Stats",
                    tableOutput("data_stats")),
           tabPanel("Info",
-                   p(htmlOutput("introduction")),
+                   htmlOutput("introduction"),
+                   tableOutput("overall_stats")
           )
         )
       )
@@ -58,20 +66,61 @@ ui <- fluidPage(
 # Define server logic required to draw a plot
 server <- function(input, output, session) {
    message("*** STARTING APP***")
-   check_data <- reactiveFileReader(1000, session, result_dir, setup_workspace)
+   check_data1 <- reactiveFileReader(1000, session, part1_result_dir, read_part1_data)
+   check_data2 <- reactiveFileReader(1000, session, part2_result_dir, read_part2_data)
+   assign("both_parts", bind_rows(part1, part2), globalenv())
    output$introduction <- renderUI({
      get_intro_text()
    })
+   output$overall_stats <- renderTable({
+      check_data1()
+      check_data2()
+      assign("both_parts", bind_rows(part1, part2), globalenv())
+      parts <- both_parts_meta %>% group_by(part) %>% 
+         summarise(n = n(),  
+                   n_female = sum(gender == "female", na.rm = T),
+                   mean_age = mean(age, na.rm= T), 
+                   mean_GMS = mean(GMS.general, na.rm = T), 
+                   mean_difficulty = mean(difficulty, na.rm = T),  
+                   mean_liking = mean(liking, na.rm = T), .groups = "drop") %>% 
+         rename(type = part)
+      
+      stimuli <- both_parts_meta %>% 
+         group_by(stimulus) %>% 
+         summarise(n = n(),  
+                   n_female = sum(gender == "female", na.rm = T),
+                   mean_age = mean(age, na.rm= T), 
+                   mean_GMS = mean(GMS.general, na.rm = T), 
+                   mean_difficulty = mean(difficulty, na.rm = T),  
+                   mean_liking = mean(liking, na.rm = T), .groups = "drop") %>% 
+         rename(type = stimulus)
+      bind_rows(parts, stimuli) 
+      })
    output$data_stats <- renderTable({
-      check_data()
-     part2_meta %>% mutate(n = 1:n()) %>% select(n, everything())
+      check_data1()
+      check_data2()
+      assign("both_parts", bind_rows(part1, part2), globalenv())
+         
+      both_parts_meta %>% 
+         filter(stimulus == input$stimulus) %>% 
+         mutate(n = 1:n()) %>% 
+         mutate(p_id = sprintf("%s...", substr(p_id, 1, 8))) %>% 
+         select(n, everything())
    })
+   
    output$marker_plot <- renderPlot({
-      check_data()
+      check_data1()
+      check_data2()
+      assign("both_parts", bind_rows(part1, part2), globalenv())
+      data <- both_parts %>% filter(stimulus == input$stimulus)
+      end <- 450
+      if(str_detect(input$stimulus, "part1")){
+         end <- 70
+      }
       if(input$plot_type == "lines"){
-         plot_marker() 
+         plot_marker(data = data) 
       } else{
-       plot_gaussification()
+       plot_gaussification(data = data, end = end)
      }
    })
    
