@@ -22,7 +22,7 @@ names(stimulus_choices) <- stimulus_choices %>%
    str_replace("_", ": ") 
 
 get_intro_text <- function(){
-  div(h4("Welcome to the Form Segmentation Analysis App"), 
+  div(h3("Welcome to the Form Segmentation Analysis App"), 
          p("This app allows you visualize and inspect the data from a study on form and phrase perception in classical music",
            "that was carried out by the Max Planck Institute for empirical Aesthetics, Frankfurt/M., Germany"),
       p("Have fun!"),
@@ -48,14 +48,15 @@ ui <- fluidPage(
       # Show a plot of the generated distribution
       mainPanel(
         tabsetPanel(type ="tabs",
-          tabPanel("Plot",
-                   plotOutput("marker_plot", width = "900px", height = "600px")),
-          tabPanel("Stats",
-                   tableOutput("data_stats")),
-          tabPanel("Info",
-                   htmlOutput("introduction"),
-                   tableOutput("overall_stats")
-          )
+               tabPanel("Info",
+                        htmlOutput("introduction"),
+                        h4("Summary"),
+                        tableOutput("overall_stats")
+                    ),
+               tabPanel("Plot",
+                        plotOutput("marker_plot", width = "900px", height = "600px")),
+               tabPanel("Stats",
+                        tableOutput("data_stats"))
         )
       )
    )
@@ -78,8 +79,10 @@ server <- function(input, output, session) {
       assign("both_parts", bind_rows(part1, part2), globalenv())
       parts <- both_parts_meta %>% group_by(part) %>% 
          summarise(n = n(),  
+                   n_unique = n_distinct(p_id),
                    n_female = sum(gender == "female", na.rm = T),
-                   mean_age = mean(age, na.rm= T), 
+                   mean_marker = mean(count),
+                   mean_age = mean(age, na.rm = T), 
                    mean_GMS = mean(GMS.general, na.rm = T), 
                    mean_difficulty = mean(difficulty, na.rm = T),  
                    mean_liking = mean(liking, na.rm = T), .groups = "drop") %>% 
@@ -88,8 +91,10 @@ server <- function(input, output, session) {
       stimuli <- both_parts_meta %>% 
          group_by(stimulus) %>% 
          summarise(n = n(),  
+                   n_unique = n_distinct(p_id),
                    n_female = sum(gender == "female", na.rm = T),
-                   mean_age = mean(age, na.rm= T), 
+                   mean_marker = mean(count),
+                   mean_age = mean(age, na.rm = T), 
                    mean_GMS = mean(GMS.general, na.rm = T), 
                    mean_difficulty = mean(difficulty, na.rm = T),  
                    mean_liking = mean(liking, na.rm = T), .groups = "drop") %>% 

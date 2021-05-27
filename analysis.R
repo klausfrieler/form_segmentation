@@ -65,7 +65,7 @@ read_part1_data <- function(result_dir = "data/part1"){
                 summarise(d = mean(d, na.rm = T), m = max(marker), .groups ="drop"), 
               by = "p_id")
   part1_meta <- part1_all %>% 
-    distinct(p_id, stimulus, difficulty, liking, age, gender, GMS.general) %>% 
+    distinct(p_id, stimulus, difficulty, count, liking, age, gender, GMS.general) %>% 
     mutate(part = "PART1")
   part1 <- part1_all %>% 
     filter(!is.na(d))
@@ -85,7 +85,7 @@ read_part2_data <- function(result_dir = "data/part2"){
                 group_by(p_id) %>% mutate(d = c(diff(marker), NA)) %>% 
                 summarise(d = mean(d, na.rm = T), m = max(marker), .groups ="drop"), 
               by = "p_id")
-  part2_meta <- part2_all %>% distinct(p_id, stimulus, difficulty, liking, age, gender, GMS.general)%>% 
+  part2_meta <- part2_all %>% distinct(p_id, stimulus, count, difficulty, liking, age, gender, GMS.general)%>% 
     mutate(part = "PART2")
   part2 <- part2_all %>% 
     filter(m > 200, !is.na(d), marker < 450)
