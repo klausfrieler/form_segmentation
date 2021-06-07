@@ -80,6 +80,7 @@ server <- function(input, output, session) {
       parts <- both_parts_meta %>% group_by(part) %>% 
          summarise(n = n(),  
                    n_unique = n_distinct(p_id),
+                   n_male = sum(gender == "male", na.rm = T),
                    n_female = sum(gender == "female", na.rm = T),
                    mean_marker = mean(count),
                    mean_age = mean(age, na.rm = T), 
@@ -92,6 +93,7 @@ server <- function(input, output, session) {
          group_by(stimulus) %>% 
          summarise(n = n(),  
                    n_unique = n_distinct(p_id),
+                   n_male = sum(gender == "male", na.rm = T),
                    n_female = sum(gender == "female", na.rm = T),
                    mean_marker = mean(count),
                    mean_age = mean(age, na.rm = T), 

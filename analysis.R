@@ -22,8 +22,10 @@ get_gaussification_peaks <- function(gauss_data, with_plot = F){
   }
   t_max
 }
-
-gaussification <- function(onsets, deltaT = 0.1, sigma = 2, weights = NULL, start = -1, end = 450, with_singles = F){
+rect_func <- function(t, t0, half_width = .5){
+  ifelse(abs(t - t0) <= half_width, 1.0, 0.0)
+}
+gaussification <- function(onsets, deltaT = 0.1, sigma = 2, weights = NULL, start = -1, end = 450, use_rect_func = FALSE, with_singles = F){
   if(is.null(start)){
     start <- min(onsets) - 2 * sigma
   }
@@ -36,10 +38,19 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 2, weights = NULL, star
     weights <- rep(1, length(onsets))
   }
   time_points <- seq(start, end, deltaT)
-  sig_fact <- 1/sigma/sigma 
-  singles <- map(seq_along(onsets), function(i){
-    weights[i] * exp( -.5 * (onsets[i] - time_points) * (onsets[i] - time_points)*sig_fact)
-  })
+  if(use_rect_func){
+    singles <- map(seq_along(onsets), function(i){
+      weights[i] * rect_func(time_points, onsets[i], half_width = sigma)
+    })
+    
+  }
+  else{
+    sig_fact <- 1/sigma/sigma 
+    singles <- map(seq_along(onsets), function(i){
+      weights[i] * exp( -.5 * (onsets[i] - time_points) * (onsets[i] - time_points)*sig_fact)
+    })
+    
+  }
   val <- reduce(singles, function(x,y) x + y)
   ret <- tibble(t = time_points, val = val)
   if(with_singles){
@@ -58,6 +69,7 @@ setup_workspace <- function(part1_results = "data/part1", part2_results = "data/
 
 read_part1_data <- function(result_dir = "data/part1"){
   messagef("Setting up part1 data from %s", result_dir)
+  
   part1_all <- MSM::read_MSM_data(result_dir, expand_markers = T) 
   part1_all <- part1_all %>% 
     left_join(part1_all %>% 
@@ -79,7 +91,7 @@ read_part1_data <- function(result_dir = "data/part1"){
 read_part2_data <- function(result_dir = "data/part2"){
   messagef("Setting up part2 data from %s", result_dir)
   part2_all <- MSM::read_MSM_data(result_dir, expand_markers = T) %>% 
-    filter(lubridate::day(time_ended) > 20)
+    filter(lubridate::day(time_ended) > 20 | lubridate::month(time_ended) >= 6)
   part2_all <- part2_all %>% 
     left_join(part2_all %>% 
                 group_by(p_id) %>% mutate(d = c(diff(marker), NA)) %>% 
@@ -109,7 +121,7 @@ plot_marker <- function(data = part2){
 }
 
 plot_gaussification <- function(data = part2, sigma = 2, deltaT = .1, start = -1, end = 450, with_marker = F){
-  combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end)
+  combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
   peaks <- tibble(w = get_gaussification_peaks(combined_marker))
   q <- combined_marker %>% ggplot(aes(x = t, y = val))
   q <- q + geom_line(color = "indianred") 
