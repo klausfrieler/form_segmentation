@@ -77,18 +77,22 @@ server <- function(input, output, session) {
       check_data1()
       check_data2()
       assign("both_parts", bind_rows(part1, part2), globalenv())
-      parts <- both_parts_meta %>% group_by(part) %>% 
-         summarise(n = n(),  
-                   n_unique = n_distinct(p_id),
-                   n_male = sum(gender == "male", na.rm = T),
-                   n_female = sum(gender == "female", na.rm = T),
-                   mean_marker = mean(count),
+      p_id_stats <- both_parts_meta %>% 
+         group_by(part) %>% 
+         distinct(p_id, gender, age, GMS.general) %>% 
+         summarise(n_female = sum(gender == "female", na.rm = T), 
+                   n_male = sum(gender == "male", na.rm = T), 
                    mean_age = mean(age, na.rm = T), 
                    mean_GMS = mean(GMS.general, na.rm = T), 
+                   n_unique = n(), .groups = "drop")
+      
+      parts <- both_parts_meta %>% group_by(part) %>% 
+         summarise(n = n(),  
+                   mean_marker = mean(count),
                    mean_difficulty = mean(difficulty, na.rm = T),  
                    mean_liking = mean(liking, na.rm = T), .groups = "drop") %>% 
-         rename(type = part)
-      
+         rename(type = part) %>% 
+         bind_cols(p_id_stats)
       stimuli <- both_parts_meta %>% 
          group_by(stimulus) %>% 
          summarise(n = n(),  
@@ -101,7 +105,8 @@ server <- function(input, output, session) {
                    mean_difficulty = mean(difficulty, na.rm = T),  
                    mean_liking = mean(liking, na.rm = T), .groups = "drop") %>% 
          rename(type = stimulus)
-      bind_rows(parts, stimuli) 
+      bind_rows(parts, stimuli) %>% 
+         select(type, starts_with("n"), mean_age, mean_GMS, everything())
       })
    output$data_stats <- renderTable({
       check_data1()
