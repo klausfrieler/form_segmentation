@@ -3,7 +3,13 @@
 
 library(tidyverse)
 library(mccr)
-
+install.packages("cvAUC")
+library(cvAUC)
+install.packages('caret')
+library(caret)
+install.packages('lsa')
+library(TSdist)
+library(lsa)
 
 
 # read data
@@ -45,6 +51,139 @@ df_qual <- read.csv("boundaries_complete.csv", sep=",")
 names(df_qual)[1] <- "Time"
 
 
+##################### Latest code - functions that creae results table ##############################
+
+#some data prep that I can intergrate into functions
+
+#make data into list
+
+df_p1_t1_list = split(df_p1_t1, f = df_p1_t1$ID)
+
+#change df into list of vectors of time
+obs_list <-    lapply(df_p1_t1_list, "[", , 3)
+
+vect_gt <- df_qual$Time
+
+
+####### Master function#####
+
+sumFunc <- function(vect1, vect_gt, sim, bw){
+  if (sim == 1) { #AUC
+    #binning vectors
+    vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    
+    match <- AUC(vect1, vect_gt) #function to return prediction vector based on bw
+    
+  } else if (sim == 2) { # Matthew correlation
+    #binning vectors
+    vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    
+    match <- mccr(vect1, vect_gt) #function to return prediction vector based on bw
+    
+    
+    #  } else if (sim == 3) { #F1 score
+    #binning vectors
+    #  vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    # vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    #creating factors out of biined vectors
+    # vect1 <- as.factor(vect1)
+    #vect_gt <-as.factor(vect_gt)
+    
+    
+    #match <- confusionMatrix(vect1, vect_gt, mode = "everything", positive="1")$byClass[7] #function to return prediction vector based on bw
+    #getting just the value not working. Ask Klaus
+    
+  } else if (sim==4) {# Euclidean dist
+    
+    vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    
+    match <- EuclideanDistance(vect1, vect_gt) #function to return prediction vector based on bw
+    
+  } else if (sim==5) { #cosine similarity
+    #binning vectors
+    vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    
+    match <- cosine(vect1, vect_gt) #function to return prediction vector based on bw
+    
+  } else if (sim==6) { # correlation
+    #binning vectors
+    vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+    
+    match <- cor(vect1, vect_gt) #function to return prediction vector based on bw
+    
+  }
+  
+  return(match)
+}
+
+
+# wrapper function 
+
+#function taking test and GT vectors, testy type, and bin width - returning results df
+
+lapp_df <- function (test, list, vect_gt, bw){
+  res_df <- lapply(list, sumFunc, vect_gt=vect_gt, sim=test, bw=bw)
+  res_df <- do.call(rbind.data.frame, res_df)
+  
+  res_df[1:43,2] <- test
+  res_df[1:43,3] <- bw
+  res_df[1:43,4] <- "main"
+  res_df[1:43,5] <- 1:43
+  
+  
+  
+  colnames(res_df) <- c("result", "test", "bw", "gt", "ID")
+  
+  return(res_df)
+}
+
+
+
+#WORKING!
+test_lapp <- lapp_df(1, obs_list, vect_gt, 0.5)
+
+
+# testing multiple tests function
+sappl_df <- function (list, vect_gt, bw) {
+  res_all_tests_df <- lapp_df(1, list, vect_gt, bw) %>% 
+    rbind(lapp_df(2, list, vect_gt, bw)) %>% 
+    rbind(lapp_df(4, list, vect_gt, bw)) %>% 
+    rbind(lapp_df(5, list, vect_gt, bw)) %>% 
+    rbind(lapp_df(6, list, vect_gt, bw)) %>% 
+    
+    
+    return(res_all_tests_df)
+}
+
+#test - working!!! 
+test_lapp <- sappl_df(obs_list, vect_gt, 0.5)
+
+# multiple bw function 
+
+bw_function <- function (list, vect_gt) {
+  res_all_tests_bw_df <- sappl_df(list, vect_gt, 0.1) %>%
+    rbind(sappl_df(list, vect_gt, 0.3)) %>%
+    rbind(sappl_df(list, vect_gt, 0.5)) %>%
+    rbind(sappl_df(list, vect_gt, 0.7))
+  
+  return(res_all_tests_bw_df)
+}
+
+
+#test - working! 
+test_bw <- bw_function(obs_list, vect_gt)
+
+
+
+################################################################################
+
+
+
 
 ########################################################################################################
 
@@ -83,6 +222,10 @@ df_p1_t1 <- select(df_p1_t1, ID, FrameNo, Time_in_s)
 pred_th1 <- list(hist(df_qual$Time, breaks = seq(from=0, to=330, by=5), plot= FALSE)$counts)
 
 # function that takes in a data set and a binning value and returns a prediction list
+
+
+
+#########################OLD CODE BEYOND HERE#######################################
 
 
 
@@ -135,6 +278,10 @@ densX <- function(df, x){
   return(vectors)
 }
 
+
+temp1 <- density(df_p1_t1$Time_in_s)
+
+
 #example usage  
 
 temp2 <- densX(df_p1_t1, 10)
@@ -144,9 +291,11 @@ temp2 <- densX(df_p1_t1, 10)
 
 
 
-#creating matching function that takes a list of vectors and a theoretical vector and returns a DATA FRAME of matching scores
 
-matchFuncDF <- function(vecs, x){
+
+#matching function that takes a list of vectors and a theoretical vector and returns a DATA FRAME of matching scores
+
+match_Func_DF <- function(vecs, x){
   vect_df <- data.frame()
   for(i in 1:length(vecs)) {
     vect_df[i,1] <- i
@@ -159,7 +308,7 @@ matchFuncDF <- function(vecs, x){
 }
 
 test5 <- matchFuncDF(temp1, test)
-
+mccr(test, vect1)
 
 #matching function that takes a list of vectors and a theoretical vector and returns a list of matching scores
 # THE PREVIOUS FUNCTION MAKES THIS ONE REDUNDANT, BUT KEEPING IT HERE IN CASE IT IS USED LATER
@@ -173,3 +322,36 @@ matchFunc <- function(vecs, x){
 }
 
 test2 <- matchFunc(temp1, test)
+
+######## variables created for testing
+
+vectObs <- subset(df_p1_t1, ID==1) %>% 
+  select(Time_in_s)
+
+vectObs <-  vectObs$Time_in_s
+
+vect_gt <- df_qual$Time
+
+vect2 <- hist(vectObs, breaks = seq(from=0, to=330, by=10), plot = FALSE)$counts
+vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=10), plot = FALSE)$counts
+
+mccr(vect2, vect_gt)
+test <- as.factor(test)
+vect1 <- as.factor(vect1)
+res <- confusionMatrix(actual, pred, mode = "everything", positive="1")
+res2 <- res$byClass:F1
+
+res2 <- res$byClass[7]
+
+actual <- factor(rep(c(1, 0), times=c(160, 240)))
+pred <- factor(rep(c(1, 0, 1, 0), times=c(120, 40, 70, 170)))
+
+####################################
+
+
+
+sumFunc(vectObs, vectGT, 6, 2)
+sumFunc(vect1, vectGT, 1, 1)
+
+sumFunc(vect1, vectGT, 2, 10)
+
