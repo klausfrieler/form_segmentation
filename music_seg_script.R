@@ -67,7 +67,7 @@ vect_gt <- df_qual$Time
 
 ####### Master function#####
 
-sumFunc <- function(vect1, vect_gt, sim, bw){
+sum_func <- function(vect1, vect_gt, sim, bw){
   if (sim == 1) { #AUC
     #binning vectors
     vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
@@ -127,7 +127,7 @@ sumFunc <- function(vect1, vect_gt, sim, bw){
 #function taking test and GT vectors, testy type, and bin width - returning results df
 
 lapp_df <- function (test, list, vect_gt, bw){
-  res_df <- lapply(list, sumFunc, vect_gt=vect_gt, sim=test, bw=bw)
+  res_df <- lapply(list, sum_func, vect_gt=vect_gt, sim=test, bw=bw)
   res_df <- do.call(rbind.data.frame, res_df)
   
   res_df[1:43,2] <- test
