@@ -8,8 +8,9 @@
 #
 library(shiny)
 library(shinythemes)
+library(tidyverse)
 
-source("analysis.R")
+#source("analysis.R")
 
 #load("data/musem_workspace.rda")
 part1_result_dir <- "data/part1"

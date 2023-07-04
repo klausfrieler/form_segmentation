@@ -1,5 +1,5 @@
 library(tidyverse)
-library(MSM)
+#library(MSM)
 
 messagef <- function(...) message(sprintf(...))
 printf <- function(...) print(sprintf(...))
@@ -22,9 +22,11 @@ get_gaussification_peaks <- function(gauss_data, with_plot = F){
   }
   t_max
 }
+
 rect_func <- function(t, t0, half_width = .5){
   ifelse(abs(t - t0) <= half_width, 1.0, 0.0)
 }
+
 gaussification <- function(onsets, deltaT = 0.1, sigma = 2, weights = NULL, start = -1, end = 450, use_rect_func = FALSE, with_singles = F){
   if(is.null(start)){
     start <- min(onsets) - 2 * sigma
