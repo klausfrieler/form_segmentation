@@ -4,19 +4,15 @@
 library(tidyverse)
 library(mccr)
 library(cvAUC)
-install.packages("MESS")
-library(MESS)
+library(MASS)
 library(caret)
 library(TSdist)
 library(lsa)
-install.packages("ggridges")
 library(ggridges)
-install.packages("psych")
 library(psych)
+library(gtools)
 # read data
 
-install.packages("gtools")
-library(gtools)
 
 df_all <- read.csv("dataLONG.csv")
 
@@ -25,7 +21,7 @@ df_all <- read.csv("dataLONG.csv")
 # trying to do all the data cleaning with pipes
 
 # piece 1 trial 1
-df_p1_t1 <- subset(read.csv("dataLONG.csv"), Stimulus=="part2_01.avi") %>% 
+df_p1_t1 <- subset(df_all, Stimulus=="part2_01.avi") %>% 
   filter(Event=="BOUNDARY_REGISTERED") %>% 
   subset(Trial==1) %>% 
   select(ID, FrameNo, Time_in_s)
@@ -139,16 +135,18 @@ vect_gt <- df_qual$Time
 
 get_sims <- function(vect1, vect_gt, bw){
   match = NA
-  vect1 <- hist(vect1, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
-  vect_gt <- hist(vect_gt, breaks = seq(from=0, to=330, by=bw), plot = FALSE)$counts
+  vect1 <- hist(vect1, breaks = seq(from = 0, to = 330, by = bw), plot = FALSE)$counts
+  vect_gt <- hist(vect_gt, breaks = seq(from = 0, to = 330, by = bw), plot = FALSE)$counts
 
-  vect1[vect1>1] <- 1
+  vect1[vect1 > 1] <- 1
   
-  vect_gt[vect_gt>1] <- 1
+  vect_gt[vect_gt > 1] <- 1
   
 
   sim_f1 <- confusionMatrix(as.factor(vect1), as.factor(vect_gt), mode = "everything", positive="1")$byClass[7] #function to return prediction vector based on bw
-  
+  if(is.na(sim_f1)){
+    sim_f1 <- 0
+  }  
 
   sim_AUC <- auc(vect1, vect_gt) #function to return prediction vector based on bw
   sim_mccr <- mccr(vect1, vect_gt) #function to return prediction vector based on bw
@@ -166,12 +164,12 @@ get_sims <- function(vect1, vect_gt, bw){
 
 #function taking test and GT vectors, testy type, and bin width - returning results df
 # functional programming - everything is a function and you apply them to multiple vars
-get_all_sims <- function(obs_list, vect_gt, bw_range=seq(.5, 1.5, .25)){
-  
-  imap_dfr(obs_list, function(x, id){ #works like lapply; function is anonymous functions also called lamda
+get_all_sims <- function(segment_data, vect_gt, bw_range = seq(.5, 1.5, .25)){
+  p_ids <- unique(segment_data)$p_id
+  map_dfr(p_ids, function(id){ #works like lapply; function is anonymous functions also called lamda
     map_dfr(bw_range, function(bw){ # like a nested loop 
-      get_sims(x,vect_gt, bw) %>%  # 
-        mutate(bw=bw, id=id) # adds columns to data - also able to do operations on columns
+      get_sims(segment_data[segment_data$p_id ==id,], vect_gt, bw) %>%  # 
+        mutate(bw = bw, id = id) # adds columns to data - also able to do operations on columns
     })
   })
 } 
@@ -179,12 +177,12 @@ get_all_sims <- function(obs_list, vect_gt, bw_range=seq(.5, 1.5, .25)){
 
 # testing f1 errors
 
-vect1 <-  hist(obs_list[[2]], breaks = seq(from=0, to=330, by=.5), plot = FALSE)$counts
+vect1 <-  hist(obs_list[[2]][[1]], breaks = seq(from=0, to=330, by=.5), plot = FALSE)$counts
 vect2 <-hist(vect_gt, breaks = seq(from=0, to=330, by=.5), plot = FALSE)$counts
 
-vect1[vect1>1] <- 1
+vect1[vect1 > 1] <- 1
 
-vect2[vect2>1] <- 1
+vect2[vect2 > 1] <- 1
 
 sim_f1 <- confusionMatrix(as.factor(vect1), as.factor(vect2), mode = "everything", positive="1")$byClass[7]
 

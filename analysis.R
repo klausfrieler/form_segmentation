@@ -1,4 +1,12 @@
 library(tidyverse)
+library(mccr)
+library(cvAUC)
+library(MASS)
+library(caret)
+library(proxy)
+library(ggridges)
+library(psych)
+
 #library(MSM)
 
 messagef <- function(...) message(sprintf(...))
@@ -61,6 +69,75 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 2, weights = NULL, star
   }
   ret
 }
+
+get_sims <- function(time_points, ground_truth, start = 0, end = 330, bw = 1){
+  #browser()
+  bin_v <- hist(time_points, breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
+  bin_gt <- hist(ground_truth, breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
+  
+  bin_v[bin_v > 1] <- 1
+  bin_gt[bin_gt > 1] <- 1
+  
+  sim_f1 <- confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1")$byClass[7] #function to return prediction vector based on bw
+  if(is.na(sim_f1)){
+    sim_f1 <- 0
+  }  
+  return(tibble(sim_f1 = sim_f1))
+  sim_ppv <- confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1")$byClass[3] #function to return prediction vector based on bw
+  if(is.na(sim_ppv)){
+    sim_ppv <- 0
+  }  
+  #browser()
+  sim_AUC <- cvAUC::AUC(bin_v, bin_gt) 
+  sim_mccr <- mccr::mccr(bin_v, bin_gt) 
+  sim_euc_dist <- proxy::dist(rbind(bin_v, bin_gt), "euclidean")  %>% as.numeric()
+  sim_cosine <- proxy::simil(rbind(bin_v, bin_gt), "cosine") %>% as.numeric() 
+  sim_corr <- cor(bin_v, bin_gt) 
+  return(tibble(sim_AUC = sim_AUC, 
+                sim_mccr = sim_mccr, 
+                sim_euc_dist = sim_euc_dist/sqrt(length(bin_v)), 
+                sim_cosine = sim_cosine, 
+                sim_corr = sim_corr, 
+                sim_ppv = sim_ppv,
+                sim_f1 = sim_f1, 
+                n_bins = length(bin_v)))
+  
+}
+
+#function taking test and GT vectors, testy type, and bin width - returning results df
+#functional programming - everything is a function and you apply them to multiple vars
+get_all_sims <- function(segment_data, vect_gt, bw_range = seq(.5, 1.5, .25)){
+  p_ids <- unique(segment_data$p_id)
+  
+  map_dfr(p_ids, function(id){ #works like lapply; function is anonymous functions also called lamda
+    
+    map_dfr(bw_range, function(bw){ # like a nested loop 
+
+      messagef("p_id = %s, bw = %.2f", id, bw)
+      # a <-   get_sims(segment_data[segment_data$p_id ==id,]$time_in_s, vect_gt, bw) %>%  
+      #   mutate(bw = bw, id = id)
+      get_sims(segment_data[segment_data$p_id ==id,]$time_in_s, vect_gt, bw) %>%  
+        mutate(bw = bw, p_id = id) # adds columns to data - also able to do operations on columns
+    })
+  })
+} 
+
+get_all_sims_by_trials <- function(segment_data, ground_truth, bw_range = seq(.75, .75, 0), max_level = 2){
+  p_ids <- unique(segment_data$p_id)
+  trials <- unique(segment_data$trial)
+  pieces < unique(segment_data$piece)
+  map_dfr(p_ids, function(id){ #works like lapply; function is anonymous functions also called lamda
+    
+    map_dfr(bw_range, function(bw){ # like a nested loop 
+      
+      messagef("p_id = %s, bw = %.2f", id, bw)
+      # a <-   get_sims(segment_data[segment_data$p_id ==id,]$time_in_s, vect_gt, bw) %>%  
+      #   mutate(bw = bw, id = id)
+      get_sims(segment_data[segment_data$p_id ==id,]$time_in_s, vect_gt, bw) %>%  
+        mutate(bw = bw, p_id = id) # adds columns to data - also able to do operations on columns
+    })
+  })
+} 
 
 setup_workspace <- function(part1_results = "data/part1", part2_results = "data/part2"){
   read_part1_data(part1_results)
