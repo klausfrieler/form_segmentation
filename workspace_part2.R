@@ -1,7 +1,8 @@
 library(tidyverse)
 
+piece_durations <- c(322, 421)
+
 setup_workspace <- function(){
-  browser()
   all_online <- readr::read_csv("data/part2_all_online_clean.csv")  %>% 
     filter(count != 0)
   ground_truth <- readr::read_csv("data/part2_ground_truth.csv")
@@ -11,6 +12,7 @@ setup_workspace <- function(){
     readr::read_csv("data/part2_metadata_lab.csv"),
     readr::read_csv("data/part2_metadata_online.csv"),
   )
+  browser()
   all_boundaries <- bind_rows(
     boundaries_lab %>% mutate(source = "lab"), 
     all_online %>% select(p_id, time_in_s = marker) %>% mutate(source = "online")    

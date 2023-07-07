@@ -13,8 +13,14 @@ plot_marker <- function(data = part2){
 }
 
 plot_gaussification <- function(data = part2, sigma = 2, deltaT = .1, start = -1, end = 450, with_marker = F, only_markers = F){
-  combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
-  print(get_gaussification_peaks(combined_marker))
+  if(is.data.frame(data)){
+    combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+  }
+  else{
+    combined_marker <- gaussification(data, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+    
+  }
+  #print(get_gaussification_peaks(combined_marker))
   #peaks <- tibble(w = get_gaussification_peaks(combined_marker))
   q <- combined_marker %>% ggplot(aes(x = t, y = val))
   if(only_markers){
@@ -31,5 +37,38 @@ plot_gaussification <- function(data = part2, sigma = 2, deltaT = .1, start = -1
   q <- q + scale_color_brewer(palette = "RdBu") 
   q <- q + labs(x = "Time (s)", y = "Combined segments")
   q  
+}
+
+plot_dtw_alignment <- function(x, y = NULL){
+  browser()
+  if(class(x) == "dtw"){
+    d <- x
+    x <- d$query %>% as.vector()
+    y <- d$reference %>% as.vector()
+  }
+  else{
+    if(is.null(y)){
+      stop("y must have value")
+    }
+    d <- dtw(x, y, keep.internals = T)
+  }
+  plot_df <- bind_rows(tibble(x = x, type = "query"), tibble(x = y, type = "reference"))
+  plot_df2 <- tibble(x = x[d$index1], y = y[d$index2]) %>% mutate(d = x - y)
+  
+  #browser()
+  q <- plot_df %>% ggplot(aes(x = x, y  = type, colour = type)) + geom_point(size = 5)
+  q <- q + geom_segment(data = plot_df2, 
+                        aes(x = x, y = "query", xend = y, yend = "reference"),
+                        colour = "black", 
+                        arrow = arrow(length = unit(0.30, "cm"), 
+                                      ends = "last", 
+                                      type = "closed"))
+  q <- q + theme_minimal()
+  q <- q + labs(x = "Time (s)", title = sprintf("DTW: dist = %.2f, norm = %.2f, d = %.2f, abs(d) = %.2f", 
+                                                d$distance, d$normalizedDistance, 
+                                                mean(plot_df2$d), mean(abs(plot_df2$d))))
+  q <- q + theme(legend.title = element_blank())
+  q
+  
 }
 
