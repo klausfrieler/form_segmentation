@@ -4,7 +4,6 @@ library(cvAUC)
 library(MASS)
 library(caret)
 library(proxy)
-library(ggridges)
 library(psych)
 
 #library(MSM)
@@ -139,78 +138,12 @@ get_all_sims_by_trials <- function(segment_data, ground_truth, bw_range = seq(.7
   })
 } 
 
-setup_workspace <- function(part1_results = "data/part1", part2_results = "data/part2"){
-  read_part1_data(part1_results)
-  read_part2_data(part2_results)
-  assign("both_parts", bind_rows(part1, part2), globalenv())
-  assign("both_parts_meta", bind_rows(part1_meta, part2_meta), globalenv())
-}
-
-read_part1_data <- function(result_dir = "data/part1"){
-  messagef("Setting up part1 data from %s", result_dir)
+get_sims_by_gaussification <- function(onsets1, onsets2, sigma = 1, deltaT = .1, start = 0, end = 300){
+  #browser()
+  g1 <- gaussification(onsets1, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+  g2 <- gaussification(onsets2, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+  peaks1 <- get_gaussification_peaks(g1)
+  peaks2 <- get_gaussification_peaks(g2)
+  get_sims(peaks1, peaks2, start = 0, end = end, bw = sigma)
   
-  part1_all <- MSM::read_MSM_data(result_dir, expand_markers = T) 
-  part1_all <- part1_all %>% 
-    left_join(part1_all %>% 
-                group_by(p_id) %>% mutate(d = c(diff(marker), NA)) %>% 
-                summarise(d = mean(d, na.rm = T), m = max(marker), .groups ="drop"), 
-              by = "p_id")
-  part1_meta <- part1_all %>% 
-    distinct(p_id, stimulus, difficulty, count, liking, age, gender, GMS.general) %>% 
-    mutate(part = "PART1")
-  part1 <- part1_all %>% 
-    filter(!is.na(d))
-  #combined_marker <- gaussification(part2$marker, sigma = 2, deltaT = .1)
-  assign("part1", part1, globalenv())
-  assign("part1_all", part1_all, globalenv())
-  assign("part1_meta", part1_meta, globalenv())
-  #assign("combined_marker", combined_marker, globalenv())
 }
-
-read_part2_data <- function(result_dir = "data/part2"){
-  messagef("Setting up part2 data from %s", result_dir)
-  part2_all <- MSM::read_MSM_data(result_dir, expand_markers = T) %>% 
-    filter(lubridate::day(time_ended) > 20 | lubridate::month(time_ended) >= 6)
-  part2_all <- part2_all %>% 
-    left_join(part2_all %>% 
-                group_by(p_id) %>% mutate(d = c(diff(marker), NA)) %>% 
-                summarise(d = mean(d, na.rm = T), m = max(marker), .groups ="drop"), 
-              by = "p_id")
-  part2_meta <- part2_all %>% distinct(p_id, stimulus, count, difficulty, liking, age, gender, GMS.general)%>% 
-    mutate(part = "PART2")
-  part2 <- part2_all %>% 
-    filter(m > 200, !is.na(d), marker < 450)
-  #combined_marker <- gaussification(part2$marker, sigma = 2, deltaT = .1)
-  assign("part2", part2, globalenv())
-  assign("part2_all", part2_all, globalenv())
-  assign("part2_meta", part2_meta, globalenv())
-  #assign("combined_marker", combined_marker, globalenv())
-}
-
-plot_marker <- function(data = part2){
-  q <- data %>% ggplot(aes(x = marker, y = as.integer(factor(p_id)), color = p_id))
-  q <- q + geom_vline(aes(xintercept = marker), alpha = .2)
-  q <- q + geom_point(size = 2) 
-  q <- q + theme_minimal()
-  q <- q + theme(legend.position = "none")  
-  q <- q + theme(panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank())
-  q <- q + labs(x = "Time (s)", y ="Participant")
-  
-  q
-}
-
-plot_gaussification <- function(data = part2, sigma = 2, deltaT = .1, start = -1, end = 450, with_marker = F){
-  combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
-  peaks <- tibble(w = get_gaussification_peaks(combined_marker))
-  q <- combined_marker %>% ggplot(aes(x = t, y = val))
-  q <- q + geom_line(color = "indianred") 
-  if(with_marker){
-    peaks <- tibble(w = get_gaussification_peaks(combined_marker))
-    q <- q + geom_vline(data = peaks, aes(xintercept = w), color = "lightblue4")
-  }
-  q <- q + theme_minimal() 
-  q <- q + scale_color_brewer(palette = "RdBu") 
-  q <- q + labs(x = "Time (s)", y = "Combined segments")
-  q  
-}
-
