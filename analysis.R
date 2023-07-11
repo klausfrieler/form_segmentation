@@ -51,10 +51,10 @@ rect_func <- function(t, t0, half_width = .5){
   ifelse(abs(t - t0) <= half_width, 1.0, 0.0)
 }
 
-resample_bin_vec <- function(bin_vec, window_size = 3, overlap = 1){
+resample_bin_vec <- function(bin_vec, window_size = 3, shift = 1){
   l <- length(bin_vec)
   pad_bin_vec <- c(bin_vec, rep(0, ceiling(l/window_size) * window_size - l))
-  window_starts <- seq(1, length(pad_bin_vec), overlap)
+  window_starts <- seq(1, length(pad_bin_vec), shift)
   window_starts <- window_starts[window_starts <= (length(pad_bin_vec) - window_size + 1)]
   #values <- rep(1, window_size) * any(pad_bin_vec[window_starts])
   ret <- rep(0, length(bin_vec))
@@ -72,7 +72,7 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 5, weights = NULL, star
   if(is.null(end)){
     end <- max(onsets) + 2*sigma
   }
-  messagef("start = %.2f, end = %.2f", start,  end)
+  #messagef("start = %.2f, end = %.2f", start,  end)
   ret <- NULL
   if(is.null(weights)){
     weights <- rep(1, length(onsets))
@@ -100,22 +100,34 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 5, weights = NULL, star
   ret
 }
 
-get_sims <- function(time_points, ground_truth, start = 0, end = 330, bw = 1, resample_window = 3, resample_overlap = 3){
-  bin_v <- hist(time_points, breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
-  bin_gt <- hist(ground_truth, breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
+get_sims <- function(time_points, 
+                     ground_truth, 
+                     start = 0,  end = 330, bw = 1, 
+                     resample_window = 0, resample_shift = 3){
+  #browser()
+  bin_v <- hist(time_points[time_points>= start & time_points <= end], breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
+  bin_gt <- hist(ground_truth[ground_truth >= start & ground_truth <= end], breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
   
   bin_v[bin_v > 1] <- 1
   bin_gt[bin_gt > 1] <- 1
   if(resample_window != 0){
-    bin_v <- resample_bin_vec(bin_v, window_size = resample_window, resample_overlap)
-    bin_gt <- resample_bin_vec(bin_gt, window_size = resample_window, resample_overlap)
+    if(resample_shift > resample_window){
+      resample_shift <- resample_window
+    } 
+    bin_v <- resample_bin_vec(bin_v, window_size = resample_window, resample_shift)
+    bin_gt <- resample_bin_vec(bin_gt, window_size = resample_window, resample_shift)
   }
-  browser()
+  #browser()
+  if(length(unique(bin_v)) == 1 || length(unique(bin_gt)) == 1){
+    return(tibble(sim_f1 = 1))
+  }
   sim_f1 <- confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1")$byClass[7] #function to return prediction vector based on bw
   if(is.na(sim_f1)){
+    #browser()
     sim_f1 <- 0
   }  
   return(tibble(sim_f1 = sim_f1))
+  
   sim_ppv <- confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1")$byClass[3] #function to return prediction vector based on bw
   if(is.na(sim_ppv)){
     sim_ppv <- 0
@@ -135,6 +147,51 @@ get_sims <- function(time_points, ground_truth, start = 0, end = 330, bw = 1, re
                 sim_f1 = sim_f1, 
                 n_bins = length(bin_v)))
   
+}
+
+get_pairwise_sims <- function(segments, start = 0, end = NULL, bw = .75, window_size = 0, window_shift = 3){
+  ids <- unique(segments$p_id)
+  pieces <- unique(segments$piece) %>% na.omit()
+  
+  map_dfr(pieces, function(pi){
+    trials <-   segments %>% filter(piece == pi) %>% pull(trial) %>% unique()
+    map_dfr(trials, function(tri){
+      map_dfr(1:(length(ids)-1), function(i){
+        onsets1 <- segments %>% filter(p_id == ids[i], piece == pi, trial == tri) %>% pull(time_in_s)
+        map_dfr((i + 1):length(ids), function(j){
+          #browser()
+          if(i %% 10 == 0 & j %% 10 == 0){
+            messagef("Calculating: piece = %s, trial = %s, id1 = %s, id2 = %s", pi, tri, ids[i], ids[j])
+          }
+          onsets2 <- segments %>% filter(p_id == ids[j], piece == pi) %>% pull(time_in_s)
+          f1 <- get_sims(onsets1, onsets2, start = 0, end = piece_durations[pi], bw = bw, window_size, window_shift)
+          bind_rows(tibble(id1 = ids[i], id2 = ids[j], f1= f1$sim_f1),
+                    tibble(id1 = ids[j], id2 = ids[i], f1= f1$sim_f1))
+        })
+      }) %>% mutate(bw = bw, window_size = window_size, windowm_shift = window_shift, piece = pi, trial = tri)
+      
+    })
+  }) %>% arrange(piece, id1, id2)
+}
+
+get_sims_between_trials <- function(segments, start = 0, end = NULL, bw = .75, window_size = 0, window_shift = 3){
+  ids <- unique(segments$p_id)
+  pieces <- unique(segments$piece) %>% na.omit()
+  
+  map_dfr(pieces, function(pi){
+    trials <-   segments %>% filter(piece == pi) %>% pull(trial) %>% unique()
+    if(length(trials) == 1){
+      return(NULL)
+    }
+    map_dfr(1:length(ids), function(i){
+      onsets1 <- segments %>% filter(p_id == ids[i], piece == pi, trial == 1) %>% pull(time_in_s)
+      #browser()
+      onsets2 <- segments %>% filter(p_id == ids[i], piece == pi, trial == 2) %>% pull(time_in_s)
+      f1 <- get_sims(onsets1, onsets2, start = 0, end = piece_durations[pi], bw = bw, window_size, window_shift)
+      bind_rows(tibble(id = ids[i], f1= f1$sim_f1))
+    }) %>% mutate(bw = bw, window_size = window_size, windowm_shift = window_shift, piece = pi)
+    
+  }) %>% arrange(piece, id)
 }
 
 #function taking test and GT vectors, testy type, and bin width - returning results df
@@ -173,12 +230,11 @@ get_all_sims_by_trials <- function(segment_data, ground_truth, bw_range = seq(.7
 } 
 
 get_sims_by_gaussification <- function(onsets1, onsets2, sigma = 1, deltaT = .1, start = 0, end = 300){
-  browser()
   g1 <- gaussification(onsets1, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
   g2 <- gaussification(onsets2, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
   peaks1 <- get_gaussification_peaks(g1)
   peaks2 <- get_gaussification_peaks(g2)
-  get_sims(peaks1, peaks2, start = 0, end = end, bw = sigma)
+  get_sims(peaks1, peaks2, start = start, end = end, bw = sigma)
   
 }
 
@@ -236,7 +292,7 @@ simulate_segmentation <- function(mean_log_isi = 1.5, sd_log_isi = .5,  n_seg = 
   t[t < max_t]
 }
 
-simulate_segmentation_from_groundtruth <- function(ground_truth = ground_truth, 
+simulate_segmentation_from_groundtruth <- function(ground_truth, 
                                                    size = 50,
                                                    piece = 1, 
                                                    theory = 1, 
@@ -255,27 +311,74 @@ simulate_segmentation_from_groundtruth <- function(ground_truth = ground_truth,
     })
 }
 
-simulate_segmentation_from_data <- function(segs = boundaries_lab, 
+simulate_ground_truth <- function(ground_truth, 
+                                 piece = 1, 
+                                 theory = 1, 
+                                 max_level = 3){
+  gt_log_ioi <- ground_truth %>% 
+    filter(level <= max_level, 
+           piece == !!piece, 
+           theory == !!theory, 
+           boundary_type != "ending") %>% 
+    pull(time_in_s) %>% 
+    diff() %>% 
+    log()
+  ret <-  tibble(time_in_s = simulate_segmentation(mean(gt_log_ioi), 
+                                                   sd(log(gt_log_ioi)), 
+                                                   round(1.5 * length(gt_log_ioi)), 
+                                                   piece_durations[piece]))
+  #messagef("sgr: %d", nrow(ret))
+  ret %>% mutate(boundary = 1, 
+                 beginning = 0, 
+                 ending = 0, 
+                 both = 1, 
+                 level = max_level,
+                 piece = piece, 
+                 theory = theory, 
+                 boundary_type = "both")
+  
+}
+
+simulate_segmentation_from_data <- function(segments = boundaries_lab, 
                                             piece = 1,
-                                            size = 50,
+                                            trial = 1,
+                                            size = length(unique(segments$p_id)),
                                             sigma = 1, 
                                             dT = .1,
                                             min_value = 0)
 {
-  log_part_isi <- segs %>% 
-    filter(piece == !!piece) %>% 
+  #browser()
+  log_part_isi <- segments %>% 
+    filter(piece == !!piece, trial == !!trial) %>% 
     pull(time_in_s) %>% 
     gaussification(end = piece_durations[piece] + 1, sigma = sigma) %>% 
     get_gaussification_peaks(with_plot = F, min_value = min_value) %>% 
     diff() %>% 
     log()
   #browser()
+  messagef("Simulating data with %d peaks for bw = %.2f, mean log ISI = %.2f, mean ISI = %.2f, sd log ISI = %.2f", 
+           length(log_part_isi), sigma, mean(log_part_isi), exp(mean(log_part_isi)), sd(log_part_isi))
   map_dfr(1:size, function(i){
     tibble(time_in_s = simulate_segmentation(mean(log_part_isi), 
                                              sd(log_part_isi), 
                                              round(1.1 * length(log_part_isi)), 
                                              piece_durations[piece]),
-           p_id = i)
+           p_id = sprintf("S%02d", i), 
+           piece = piece, 
+           trial = trial)
+  })
+}
+
+generate_fake_data <- function(segments = boundaries_lab, size = length(unique(segments$p_id)), bw = .75){
+  pieces <- unique(segments$piece) %>% na.omit()
+  map_dfr(pieces, function(pi){
+    trials <- unique(segments[segments$piece == pi,]$trial) %>% na.omit()
+    map_dfr(trials, function(tri){
+     ret <- simulate_segmentation_from_data(segments, piece = pi, trial = tri, sigma = bw) %>% 
+       filter(time_in_s > 0)
+     #browser()
+     ret
+    })
   })
 }
 
@@ -283,26 +386,40 @@ compare_segmentations <- function(segs = boundaries_lab,
                                   gt = ground_truth, 
                                   piece = 1,
                                   theory = 1,
-                                  max_level = 3, 
+                                  max_level = 3,
+                                  start = -1, 
+                                  end = NULL,
                                   sigma = 1,
                                   threshold = 0, 
-                                  with_plot = T){
+                                  with_plot = T,
+                                  only_plot = F){
+  #browser()
+  if(is.null(end)){
+    end <- piece_durations[piece] + 1
+  }
   part_boundaries <- segs %>% 
     filter(piece == !!piece) %>% 
     pull(time_in_s) %>% 
-    gaussification(end = piece_durations[piece] + 1, sigma = sigma) %>% 
+    gaussification(start = start, end = end, sigma = sigma) %>% 
     get_gaussification_peaks(with_plot = F, min_value = threshold)
-  print(length(part_boundaries))
-  gt_boundaries <- ground_truth %>% 
+  gt_boundaries <- gt %>% 
     filter(level <= max_level, 
            piece == !!piece, 
            theory == !!theory, 
+           time_in_s >= start, 
+           time_in_s <= end,
            boundary_type != "ending") %>% 
     pull(time_in_s)
   best <- get_best_alignment(part_boundaries, gt_boundaries)
-  sims <- get_sims_by_gaussification(part_boundaries, gt_boundaries, sigma = sigma)
-  if(with_plot) print(plot_dtw_alignment(part_boundaries, gt_boundaries))
-  browser()
-  best$summary <- bind_cols(best$summary, sims) 
-  best
+  sims <- get_sims_by_gaussification(part_boundaries, gt_boundaries, sigma = sigma, start = start, end = end)
+  if(with_plot && !only_plot) print(plot_dtw_alignment(part_boundaries, gt_boundaries) + xlim(start, end))
+  #browser()
+  if(only_plot){
+    return(plot_dtw_alignment(part_boundaries, gt_boundaries) + xlim(start, end))
+  }
+  else{
+    best$summary <- bind_cols(best$summary, sims) 
+    best
+    
+  }
 }

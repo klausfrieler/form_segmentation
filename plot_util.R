@@ -12,8 +12,19 @@ plot_marker <- function(data = part2){
   q
 }
 
-plot_gaussification <- function(data = part2, sigma = 2, deltaT = .1, start = -1, end = 450, with_marker = F, only_markers = F){
+plot_gaussification <- function(data = part2, 
+                                sigma = 2, 
+                                deltaT = .1, 
+                                start = -1, end = 450, 
+                                threshold = NULL,
+                                with_markers = F,
+                                only_markers = F, 
+                                external_markers = NULL){
   if(is.data.frame(data)){
+    if(!("marker" %in% names(data))){
+      data <- data %>% rename(marker = time_in_s)
+    }
+    
     combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
   }
   else{
@@ -23,24 +34,53 @@ plot_gaussification <- function(data = part2, sigma = 2, deltaT = .1, start = -1
   #print(get_gaussification_peaks(combined_marker))
   #peaks <- tibble(w = get_gaussification_peaks(combined_marker))
   q <- combined_marker %>% ggplot(aes(x = t, y = val))
-  if(only_markers){
-    with_marker <- T
+  if(only_markers || !is.null(external_markers)){
+    with_markers <- T
   }
   if(!only_markers){
     q <- q + geom_line(color = "indianred") 
   }
-  if(with_marker){
+  if(!is.null(external_markers)){
+    if(is.data.frame(external_markers)){
+      peaks <- tibble(w = external_markers$time_in_s)  
+    }
+    else{
+      peaks <- tibble(w = external_markers)  
+    }
+  }
+  else{
     peaks <- tibble(w = get_gaussification_peaks(combined_marker))
-    q <- q + geom_vline(data = peaks, aes(xintercept = w), color = "lightblue4")
+    
+  }
+  if(with_markers){
+    q <- q + geom_vline(data = peaks %>% filter(w >= start, w <= end), aes(xintercept = w), color = "lightblue4")
+  }
+  if(!is.null(threshold)){
+    #browser()
+    peaks <- get_gaussification_peaks(combined_marker)
+    peak_vals <- combined_marker %>% filter(t %in% peaks) %>% pull(val) 
+    if(threshold == "median"){
+      intercept <- median(peak_vals)
+    }
+    else if(threshold == "mean"){
+      intercept <- mean(peak_vals)
+    }
+    else{
+      intercept <- as.numeric(threshold)
+      if(is.na(intercept)){
+        intercept <- 0
+      }
+    }
+    q <- q + geom_hline(yintercept = intercept)
   }
   q <- q + theme_minimal() 
   q <- q + scale_color_brewer(palette = "RdBu") 
   q <- q + labs(x = "Time (s)", y = "Combined segments")
+  q <- q + xlim(start, end)
   q  
 }
 
 plot_dtw_alignment <- function(x, y = NULL){
-  browser()
   if(class(x) == "dtw"){
     d <- x
     x <- d$query %>% as.vector()
