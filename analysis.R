@@ -1,7 +1,7 @@
 library(tidyverse)
-library(mccr)
-library(cvAUC)
-library(MASS)
+#library(mccr)
+#library(cvAUC)
+#library(MASS)
 library(caret)
 library(proxy)
 library(psych)
@@ -20,6 +20,7 @@ get_arg_max <- function(x){
 }
 
 get_gaussification_peaks <- function(gauss_data, with_plot = F, min_value = 0){
+  #browser()
   if(is.list(gauss_data) & "sum" %in% names(gauss_data)){
     gauss_data <- gauss_data[["sum"]]
   }
@@ -117,13 +118,13 @@ get_sims <- function(time_points,
     bin_v <- resample_bin_vec(bin_v, window_size = resample_window, resample_shift)
     bin_gt <- resample_bin_vec(bin_gt, window_size = resample_window, resample_shift)
   }
-  print(sprintf("%s-%s", bin_v, bin_gt)[sprintf("%s-%s", bin_v, bin_gt) != "0-0"])
-  print(table(bin_v, bin_gt))
+  #print(sprintf("%s-%s", bin_v, bin_gt)[sprintf("%s-%s", bin_v, bin_gt) != "0-0"])
+  #print(table(bin_v, bin_gt))
   #browser()
   if(length(unique(bin_v)) == 1 || length(unique(bin_gt)) == 1){
     return(tibble(sim_f1 = 1))
   }
-  print(confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1"))
+  #print(confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1"))
   sim_f1 <- confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1")$byClass[7] #function to return prediction vector based on bw
   if(is.na(sim_f1)){
     #browser()
@@ -413,6 +414,7 @@ compare_segmentations <- function(segs = boundaries_lab,
            time_in_s <= end,
            boundary_type != "ending") %>% 
     pull(time_in_s)
+  
   best <- get_best_alignment(part_boundaries, gt_boundaries)
   sims <- get_sims_by_gaussification(part_boundaries, gt_boundaries, sigma = sigma, start = start, end = end)
   if(with_plot && !only_plot) print(plot_dtw_alignment(part_boundaries, gt_boundaries) + xlim(start, end))
@@ -425,4 +427,70 @@ compare_segmentations <- function(segs = boundaries_lab,
     best
     
   }
+}
+
+get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, start, end, sigma, threshold, summary = T){
+  se <- function(x, na.rm=FALSE) {
+    if (na.rm) x <- na.omit(x)
+    sqrt(var(x)/length(x))
+  }
+  ci95 <- function(x, type = c("low", "up")){
+    type <- match.arg(type)
+    b <- ifelse(type == "low", -1.96, 1.96)
+    mean(x, na.rm = T) + b * se(x, na.rm = T)
+  }
+  ci95_low <- function(x) ci95(x, "low")
+  ci95_up <- function(x) ci95(x, "up")
+  ci95_str <- function(x){
+    sprintf("[%.2f, %.2f]", ci95_low(x), ci95_up(x))
+  }
+  ret <- 
+    map_dfr(1:size, function(i){
+    gt <- simulate_ground_truth(ground_truth, 
+                                piece = as.integer(piece),
+                                max_level = as.integer(max_level),
+                                theory = 1) 
+    compare_segmentations(segs = boundary_data, 
+                          gt = gt, 
+                          piece = as.integer(piece), 
+                          theory = 1, 
+                          max_level = as.numeric(max_level),
+                          start = as.numeric(start),
+                          end = as.numeric(end),
+                          sigma = as.numeric(sigma), 
+                          threshold = threshold,
+                          with_plot = F) %>% pluck("summary")
+    
+  })
+  sim_f1 <-     compare_segmentations(segs = boundary_data, 
+                                      gt = ground_truth, 
+                                      piece = as.integer(piece), 
+                                      theory = 1, 
+                                      max_level = as.numeric(max_level),
+                                      start = as.numeric(start),
+                                      end = as.numeric(end),
+                                      sigma = as.numeric(sigma), 
+                                      threshold = threshold,
+                                      with_plot = F) %>% 
+    pluck("summary") %>% 
+    pull(sim_f1)
+  
+  
+  #browser()
+  if(summary){
+    tt <- t.test(ret$sim_f1, mu = sim_f1) %>% 
+      broom::tidy() %>% 
+      select(d_f1 = estimate, t = "statistic",  df = parameter, p.value) %>% 
+      mutate(d_f1 = d_f1 - sim_f1)
+    
+    ret <- ret %>% 
+      summarise(across(c("MAE","MAS","MAX", "d_n"), 
+                       list("mean" = mean)
+      ), 
+      across(c("norm_dist", "sim_f1"),
+             list("mean" = mean,  "ci95" = ci95_str)
+      )) %>% bind_cols(tt)  
+    
+  }
+  ret
 }

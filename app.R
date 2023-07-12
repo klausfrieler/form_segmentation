@@ -13,7 +13,7 @@ library(tidyverse)
 
 source("analysis.R")
 source("plot_util.R")
-source("workspace_part2.R")
+source("workspace_analysis.R")
 
 setup_workspace()
 
@@ -46,7 +46,7 @@ ui <- fluidPage(
    sidebarLayout(
       sidebarPanel(
          tags$style("#mode:{background-color: #72b573}"),
-         selectInput("source", "Data Source:", choices = c("Lab" = "lab", "Online" = "online", "Lab + Online" = "both"), selected = "lab"), 
+         selectInput("source", "Data Source:", choices = c("Lab" = "lab", "Online" = "online", "Lab + Online" = "both"), selected = "both"), 
          selectInput("piece", "Piece:", choices = stimulus_choices, selected = stimulus_choices[1]), 
          selectInput("trial", "Trials", choices = trial_choices, selected = "both"),
          tags$hr(),
@@ -56,12 +56,12 @@ ui <- fluidPage(
          selectInput("threshold", "Threshold: ", choices = c("No" = "0", "Mean" = "mean", "Median" = "median"), selected = "0"),
          
          tags$hr(),
+         sliderInput("max_level", "Max Level: ", min = 1, max = 3, value = 3, step = 1),
          checkboxInput("add_ground_truth", label = "Add Ground Truth", value = FALSE),
          checkboxInput("random_gt", label = "Random Ground Truth", value = FALSE),
-         checkboxInput("add_baseline", label = "Estimate Base Line", value = FALSE),
-         sliderInput("n_simulations", "Number of simulations ", choices = c(10, 100, 200, 500, 1000)),
+         checkboxInput("add_baseline", label = "Estimate Baseline", value = FALSE),
+         selectInput("n_simulations", "Number of simulations ", choices = c(10, 20, 50, 100), selected = 10),
          #actionButton("generate_random_ground_truth", label = "Go!", width = input_width/2),
-         sliderInput("max_level", "Max Level: ", min = 1, max = 3, value = 3, step = 1),
          
          width = 2
       ),      
@@ -76,7 +76,7 @@ ui <- fluidPage(
                      tabPanel("Plot",
                               plotOutput("marker_plot", width = "900px", height = "600px"),
                               tableOutput("sim_f1"),
-                              tableOutput("base_line")
+                              tableOutput("baseline")
                      ),
                      #tabPanel("Stats",
                      #         tableOutput("data_stats"))
@@ -90,9 +90,10 @@ ui <- fluidPage(
 # Define server logic required to draw a plot
 server <- function(input, output, session) {
    message("*** STARTING APP***")
+   
    g_random_ground_truth <- NULL
+   
    random_ground_truth <- reactive({
-      print("generated")
       input$random_gt
       simulate_ground_truth(ground_truth, 
                             piece = as.integer(input$piece),
@@ -105,21 +106,17 @@ server <- function(input, output, session) {
    })
    
    observeEvent(input$generate_random_ground_truth, {
-      print("generate_random_ground_truth")
       g_random_ground_truth <- random_ground_truth()
       
    })
    observeEvent(input$random_gt, {
-      print("generate_random_ground_truth")
       if(input$random_gt){
-         print("triggered")
          g_random_ground_truth <- random_ground_truth()
       }
       
    })
    observeEvent(input$plot_type, {
       if(input$plot_type == "dtw_alignment"){
-         print("toggle")
          shinyjs::hide("add_ground_truth")
       }
       else{
@@ -139,12 +136,14 @@ server <- function(input, output, session) {
    })
    observeEvent(input$piece, {
       curr_level <- as.integer(input$max_level)
+
       if(input$piece == "2"){
          updateSliderInput(session, inputId = "max_level", value = min(2, curr_level), min = 1, max = 2)
+         updateSliderInput(session, inputId = "range", value = c(0, piece_durations[2]), min = 0, max = piece_durations[2])
       }
       else{
          updateSliderInput(session, inputId = "max_level", value = min(3, curr_level), min = 1, max = 3)
-         
+         updateSliderInput(session, inputId = "range", value = c(0, piece_durations[1]), min = 0, max = piece_durations[1])
       }
    })
    
@@ -205,7 +204,7 @@ server <- function(input, output, session) {
    })
    
    current_ground_truth <- reactive({
-      gt <- ground_truth
+      gt <- ground_truth %>% filter(boundary_type != "ending")
       if(input$add_ground_truth){
          if(input$random_gt){
             gt <- g_random_ground_truth
@@ -223,8 +222,18 @@ server <- function(input, output, session) {
          threshold <- 0
       }
       threshold
-   })   
+   })  
    
+   current_baseline <- reactive({
+      get_baseline(current_data(), 
+                    ground_truth, input$n_simulations, 
+                    input$piece, input$max_level, 
+                    input$range[1], input$range[2], 
+                    input$bw, input$threshold)
+      
+   })
+
+
    output$marker_plot <- renderPlot({
       data <- current_data()
       end <- piece_durations[as.integer(input$piece)]
@@ -262,7 +271,7 @@ server <- function(input, output, session) {
       else if(input$plot_type == "dtw_alignment"){
          threshold <- current_threshold()
          gt <- current_ground_truth()
-         
+         #browser()
          compare_segmentations(segs = data, 
                                gt = gt, 
                                piece = as.integer(input$piece), 
@@ -278,6 +287,7 @@ server <- function(input, output, session) {
                   axis.text.y =  element_text(size = text_size))
       }
    })
+   
    output$sim_f1 <- renderTable({
       #browser()
       compare_segmentations(segs = current_data(), 
@@ -290,33 +300,15 @@ server <- function(input, output, session) {
                             sigma = as.numeric(input$bw), 
                             threshold = current_threshold(),
                             with_plot = F) %>% pluck("summary")
-   })
-   output$base_line <- renderTable({
-      browser()
-      if(!input$add_base_line){
+   }, caption = as.character(shiny::h4("Data Metrics")), caption.placement = "top")
+   
+   output$baseline <- renderTable({
+      if(!input$add_baseline){
          return(NULL)
       }
-      size <- as.integer(input$n_simulations)
-      map_dfr(1:size, function(i){
-         gt <- simulate_ground_truth(ground_truth, 
-                               piece = as.integer(input$piece),
-                               max_level = as.integer(input$max_level),
-                               theory = 1) 
-         compare_segmentations(segs = current_data(), 
-                               gt = gt, 
-                               piece = as.integer(input$piece), 
-                               theory = 1, 
-                               max_level = as.numeric(input$max_level),
-                               start = as.numeric(input$range[1]),
-                               end = as.numeric(input$range[2]),
-                               sigma = as.numeric(input$bw), 
-                               threshold = current_threshold(),
-                               with_plot = F) %>% pluck("summary")
-         
-      }) %>% 
-         summarise(across(where(is.numeric), mean))
-   })
-   
+      #browser()
+      current_baseline()
+   }, caption = as.character(shiny::h4("Baseline")), caption.placement = "top")
 }
 
 # Run the application 
