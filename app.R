@@ -11,7 +11,8 @@ library(shinyjs)
 library(shinythemes)
 library(tidyverse)
 
-#source("analysis.R")
+source("analysis.R")
+source("plot_util.R")
 source("workspace_part2.R")
 
 setup_workspace()
