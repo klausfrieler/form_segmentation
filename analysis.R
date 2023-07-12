@@ -117,10 +117,13 @@ get_sims <- function(time_points,
     bin_v <- resample_bin_vec(bin_v, window_size = resample_window, resample_shift)
     bin_gt <- resample_bin_vec(bin_gt, window_size = resample_window, resample_shift)
   }
+  print(sprintf("%s-%s", bin_v, bin_gt)[sprintf("%s-%s", bin_v, bin_gt) != "0-0"])
+  print(table(bin_v, bin_gt))
   #browser()
   if(length(unique(bin_v)) == 1 || length(unique(bin_gt)) == 1){
     return(tibble(sim_f1 = 1))
   }
+  print(confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1"))
   sim_f1 <- confusionMatrix(as.factor(bin_v), as.factor(bin_gt), mode = "everything", positive="1")$byClass[7] #function to return prediction vector based on bw
   if(is.na(sim_f1)){
     #browser()

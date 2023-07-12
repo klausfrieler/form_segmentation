@@ -32,4 +32,4 @@ setup_workspace <- function(){
   assign("boundaries_lab", boundaries_lab, globalenv())
   assign("metadata", metadata, globalenv())
   
-}
+} 

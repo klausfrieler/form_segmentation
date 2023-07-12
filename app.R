@@ -25,11 +25,11 @@ input_width <- 300
 text_size <- 14
 
 get_intro_text <- function(){
-  div(h3("Welcome to the Form Segmentation Analysis App"), 
-         p("This app allows you visualize and inspect the data from a study on form and phrase perception in classical music",
-           "that was carried out by the Max Planck Institute for empirical Aesthetics, Frankfurt/M., Germany"),
-      p("Have fun!"),
-      style = "width:50%;text-align:justify")
+   div(h3("Welcome to the Form Segmentation Analysis App"), 
+       p("This app allows you visualize and inspect the data from a study on form and phrase perception in classical music",
+         "that was carried out by the Max Planck Institute for empirical Aesthetics, Frankfurt/M., Germany"),
+       p("Have fun!"),
+       style = "width:50%;text-align:justify")
 }
 
 
@@ -58,6 +58,8 @@ ui <- fluidPage(
          tags$hr(),
          checkboxInput("add_ground_truth", label = "Add Ground Truth", value = FALSE),
          checkboxInput("random_gt", label = "Random Ground Truth", value = FALSE),
+         checkboxInput("add_baseline", label = "Estimate Base Line", value = FALSE),
+         sliderInput("n_simulations", "Number of simulations ", choices = c(10, 100, 200, 500, 1000)),
          #actionButton("generate_random_ground_truth", label = "Go!", width = input_width/2),
          sliderInput("max_level", "Max Level: ", min = 1, max = 3, value = 3, step = 1),
          
@@ -73,7 +75,9 @@ ui <- fluidPage(
                      ),
                      tabPanel("Plot",
                               plotOutput("marker_plot", width = "900px", height = "600px"),
-                              tableOutput("sim_f1"))#,
+                              tableOutput("sim_f1"),
+                              tableOutput("base_line")
+                     ),
                      #tabPanel("Stats",
                      #         tableOutput("data_stats"))
          )
@@ -94,10 +98,10 @@ server <- function(input, output, session) {
                             piece = as.integer(input$piece),
                             max_level = as.integer(input$max_level),
                             theory = 1) 
-      })
+   })
    
    output$introduction <- renderUI({
-     get_intro_text()
+      get_intro_text()
    })
    
    observeEvent(input$generate_random_ground_truth, {
@@ -245,10 +249,20 @@ server <- function(input, output, session) {
                   axis.text.x =  element_text(size = text_size),
                   axis.text.y =  element_text(size = text_size))
       }
+      else if(input$plot_type == "histogram"){
+         plot_marker_histogram(data = current_data(),
+                               external_markers = external_markers, 
+                               start = as.numeric(input$range[1]),
+                               end = as.numeric(input$range[2]),
+                               sigma = as.numeric(input$bw))+ 
+            theme(axis.title = element_text(size = text_size),
+                  axis.text.x =  element_text(size = text_size),
+                  axis.text.y =  element_text(size = text_size))
+      }
       else if(input$plot_type == "dtw_alignment"){
          threshold <- current_threshold()
          gt <- current_ground_truth()
-
+         
          compare_segmentations(segs = data, 
                                gt = gt, 
                                piece = as.integer(input$piece), 
@@ -277,6 +291,32 @@ server <- function(input, output, session) {
                             threshold = current_threshold(),
                             with_plot = F) %>% pluck("summary")
    })
+   output$base_line <- renderTable({
+      browser()
+      if(!input$add_base_line){
+         return(NULL)
+      }
+      size <- as.integer(input$n_simulations)
+      map_dfr(1:size, function(i){
+         gt <- simulate_ground_truth(ground_truth, 
+                               piece = as.integer(input$piece),
+                               max_level = as.integer(input$max_level),
+                               theory = 1) 
+         compare_segmentations(segs = current_data(), 
+                               gt = gt, 
+                               piece = as.integer(input$piece), 
+                               theory = 1, 
+                               max_level = as.numeric(input$max_level),
+                               start = as.numeric(input$range[1]),
+                               end = as.numeric(input$range[2]),
+                               sigma = as.numeric(input$bw), 
+                               threshold = current_threshold(),
+                               with_plot = F) %>% pluck("summary")
+         
+      }) %>% 
+         summarise(across(where(is.numeric), mean))
+   })
+   
 }
 
 # Run the application 

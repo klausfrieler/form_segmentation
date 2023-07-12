@@ -12,7 +12,7 @@ plot_marker <- function(data = part2){
   q
 }
 
-plot_gaussification <- function(data = part2, 
+plot_gaussification <- function(data = boundaries_lab, 
                                 sigma = 2, 
                                 deltaT = .1, 
                                 start = -1, end = 450, 
@@ -76,6 +76,39 @@ plot_gaussification <- function(data = part2,
   q <- q + theme_minimal() 
   q <- q + scale_color_brewer(palette = "RdBu") 
   q <- q + labs(x = "Time (s)", y = "Combined segments")
+  q <- q + xlim(start, end)
+  q  
+}
+
+plot_marker_histogram <- function(data = boundaries_lab, 
+                                  sigma = 2, 
+                                  external_markers = NULL, 
+                                  start = 0, 
+                                  end = 430){
+  q <- data %>% ggplot(aes(x = time_in_s, y = after_stat(count))) 
+  q <- q + geom_histogram(binwidth = sigma, fill = "lightblue", color = "black")
+  
+  if(!is.null(external_markers)){
+    if(is.data.frame(external_markers)){
+      if("level" %in% names(external_markers)){
+        peaks <- external_markers %>% mutate(level = factor(level))
+      }
+      else{
+        peaks <- tibble(time_in_s = external_markers$time_in_s, level = "1")
+      }
+    }
+    else{
+      peaks <- tibble(time_in_s = external_markers, level = "1")  
+    }
+    q <- q + geom_vline(data = peaks %>% filter(time_in_s >= start,
+                                                time_in_s <= end), 
+                        aes(xintercept = time_in_s, linetype = level, color = level), 
+                        linewidth = 1)
+  }
+  q <- q + theme_minimal() 
+  q <- q + scale_color_manual(values = c("indianred", "darkgreen", "coral")) 
+  #q <- q + scale_color_brewer(palette = "RdBu", direction = -1) 
+  q <- q + labs(x = "Time (s)", y = "Count")
   q <- q + xlim(start, end)
   q  
 }
