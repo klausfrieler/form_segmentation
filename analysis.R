@@ -101,6 +101,55 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 5, weights = NULL, star
   ret
 }
 
+get_conditional_prob <- function(time_points, ground_truth, forward_win = 2, backward_win = forward_win){
+  if(is.data.frame(time_points)){
+    time_points <- time_points$time_in_s
+  }
+  if(is.data.frame(ground_truth)){
+    ground_truth <- ground_truth$time_in_s
+  }
+  total_counts <- length(time_points)
+  map_dfr(1:length(ground_truth), function(i){
+    #browser()
+    counts <- time_points[time_points >= (ground_truth[i] - forward_win) & time_points <= (ground_truth[i] + backward_win)]
+    tibble(i = i, time_in_s = ground_truth[i], counts = length(counts), rel_freq = counts/total_counts)
+  })
+}
+
+get_cond_prob_baseline <- function(boundary_data, ground_truth, piece = 1:2, max_level = 1:3, size = 100, win_sizes = c(.5, 1, 1.5, 2, 2.5)){
+  
+  map_dfr(piece, function(pi){
+    max_dur <- piece_durations[pi]
+    
+    map_dfr(max_level, function(ml){
+      gt <- ground_truth %>% 
+        filter(piece == pi, 
+               level <= max_level)
+      num_segs <- nrow(gt)
+      map_dfr(win_sizes, function(ws){
+        messagef("Checking piece = %s, max_level = %s, window size = %.2f, max_dur = %.2f, num_seqs = %d", pi, ml, ws, max_dur, num_segs)
+        mu <- get_conditional_prob(boundaries_lab %>% 
+                                     filter(piece == pi), 
+                                   gt, 
+                                   forward_win = ws)  %>% 
+          pull(counts) %>% 
+          mean() 
+        baseline <- map_dbl(1:size, function(i){
+          get_conditional_prob(boundaries_lab %>% 
+                                 filter(piece == pi), 
+                               sample(seq(0, max_dur, 1), num_segs, replace = F), 
+                               forward_win = ws)  %>% 
+            pull(counts) %>% 
+            mean()})
+        
+        t.test(baseline, mu = mu) %>% broom::tidy() %>% mutate(win_size = ws, piece = pi, max_level = ml, mu = mu)
+      })
+      
+    })
+    
+  })
+}
+
 get_sims <- function(time_points, 
                      ground_truth, 
                      start = 0,  end = 330, bw = 1, 
