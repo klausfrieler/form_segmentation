@@ -31,10 +31,10 @@ get_gaussification_peaks <- function(gauss_data, with_plot = F, min_value = 0){
     threshold <- min_value
   }
   else{
-    if(min_value == "median"){
+    if(tolower(min_value) == "median"){
       threshold <- median(values)
     }
-    else if(min_value == "mean"){
+    else if(tolower(min_value) == "mean"){
       threshold <- mean(values)
     }
   }
@@ -479,7 +479,7 @@ compare_segmentations <- function(segs = boundaries_lab,
 }
 
 get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, start, end, sigma, threshold, summary = T){
-  se <- function(x, na.rm=FALSE) {
+  se <- function(x, na.rm = FALSE) {
     if (na.rm) x <- na.omit(x)
     sqrt(var(x)/length(x))
   }
@@ -542,4 +542,67 @@ get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, st
     
   }
   ret
+}
+
+get_segmentation_stats <- function(boundary_data = all_boundaries, 
+                                   ground_truth,
+                                   band_widths = seq(0.75, 3.75, .5),
+                                   baseline_size = 25){
+  pieces <- unique(boundary_data$piece)
+  start <- 0 
+  #thresholds <- c("0", "Mean")
+  thresholds <- c("mean")
+  ground_truth <- ground_truth %>% filter(boundary_type != "ending")
+  map_dfr(pieces, function(pi){
+    end <- piece_durations[pi]
+    gt <- ground_truth %>% filter(piece == pi)
+    max_level <- max(gt$level)
+    bd <- boundary_data %>% filter(piece == pi)
+    #trials <- c("both", unique(bd$trial))
+    trials <- "both"
+    map_dfr(band_widths, function(bw){
+      map_dfr(thresholds, function(thr){
+        map_dfr(trials, function(tri){
+          map_dfr(1:max_level, function(ml){
+            #browser()
+            if(tri != "both"){
+              bd_loc <- bd %>% filter(trial == tri)
+            }
+            else{
+              bd_loc <- bd
+            }
+            messagef("Check bw = %.2f [size = %d], piece = %s, trial = %s, max_level = %d, threshold = %s", bw, baseline_size, pi, tri, ml, thr)
+            bl <- get_baseline(bd_loc,
+                               gt, 
+                               baseline_size, 
+                               pi, 
+                               max_level = ml, 
+                               start, end, 
+                               sigma = bw, 
+                               threshold = thr, 
+                               summary = T)
+            f1 <- compare_segmentations(bd_loc, 
+                                        gt = gt, 
+                                        piece = pi, 
+                                        theory = 1, 
+                                        max_level = ml,
+                                        start = start,
+                                        end = end,
+                                        sigma = bw, 
+                                        threshold = thr,
+                                        with_plot = F) %>% pluck("summary")
+            tibble(piece = pi, 
+                   trial = tri,
+                   threshold = thr,
+                   theory = 1,
+                   max_level = ml,
+                   sigma = bw) %>% bind_cols(bl, f1)  
+          })
+          
+          })
+      })
+    })
+  })
+  
+
 }
