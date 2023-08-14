@@ -66,7 +66,7 @@ resample_bin_vec <- function(bin_vec, window_size = 3, shift = 1){
   ret[1:l]
 }
 
-gaussification <- function(onsets, deltaT = 0.1, sigma = 5, weights = NULL, start = -1, end = 450, use_rect_func = FALSE, with_singles = F){
+gaussification <- function(onsets, deltaT = 0.1, sigma = 5, weights = NULL, start = 0, end = 450, use_rect_func = FALSE, with_singles = F){
   if(is.null(start)){
     start <- min(onsets) - 2 * sigma
   }
@@ -153,11 +153,21 @@ get_cond_prob_baseline <- function(boundary_data, ground_truth, piece = 1:2, max
 get_sims <- function(time_points, 
                      ground_truth, 
                      start = 0,  end = 330, bw = 1, 
-                     resample_window = 0, resample_shift = 3){
+                     resample_window = 0, resample_shift = 3, with_overlap = T){
   #browser()
   bin_v <- hist(time_points[time_points>= start & time_points <= end], breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
   bin_gt <- hist(ground_truth[ground_truth >= start & ground_truth <= end], breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
-  
+  if(with_overlap){
+    # print(ground_truth)
+    # messagef("start = %.2f / %.2f end = %.2f / %.2f, maxgt = %.2f", start, start - bw/2, end, end + bw/2, max(ground_truth[ground_truth >= start & ground_truth <= end]))
+    bin_v_2 <- hist(time_points[time_points>= start & time_points <= end], breaks = seq(from = start - bw/2, to = end + bw, by = bw), plot = FALSE)$counts
+    bin_gt_2 <- hist(ground_truth[ground_truth >= start & ground_truth <= end], breaks = seq(from = start - bw/2, to = end + bw, by = bw), plot = FALSE)$counts
+    #messagef("Length difference: %d last1 = %d, last2 = %d", length(bin_v) - length(bin_v_2), bin_v[length(bin_v)], bin_v_2[length(bin_v_2)])
+    l <- min(length(bin_v), length(bin_v_2))
+    bin_v <- bin_v[1:l]  + bin_v_2[1:l]
+    bin_gt <- bin_gt[1:l]  + bin_gt_2[1:l]
+    
+  }
   bin_v[bin_v > 1] <- 1
   bin_gt[bin_gt > 1] <- 1
   if(resample_window != 0){
@@ -440,11 +450,11 @@ compare_segmentations <- function(segs = boundaries_lab,
                                   piece = 1,
                                   theory = 1,
                                   max_level = 3,
-                                  start = -1, 
+                                  start = 0, 
                                   end = NULL,
                                   sigma = 1,
                                   threshold = 0, 
-                                  with_plot = T,
+                                  with_plot = F,
                                   only_plot = F){
   #browser()
   if(is.null(end)){
@@ -463,6 +473,7 @@ compare_segmentations <- function(segs = boundaries_lab,
            time_in_s <= end,
            boundary_type != "ending") %>% 
     pull(time_in_s)
+  save(part_boundaries, gt_boundaries, file = "tmp.rda")
   
   best <- get_best_alignment(part_boundaries, gt_boundaries)
   sims <- get_sims_by_gaussification(part_boundaries, gt_boundaries, sigma = sigma, start = start, end = end)
@@ -521,24 +532,27 @@ get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, st
                                       sigma = as.numeric(sigma), 
                                       threshold = threshold,
                                       with_plot = F) %>% 
-    pluck("summary") %>% 
-    pull(sim_f1)
+    pluck("summary") 
   
   
-  #browser()
+  #if(max_level == 2)browser()
   if(summary){
-    tt <- t.test(ret$sim_f1, mu = sim_f1) %>% 
+    tt1 <- t.test(ret$sim_f1, mu = sim_f1$sim_f1) %>% 
       broom::tidy() %>% 
-      select(d_f1 = estimate, t = "statistic",  df = parameter, p.value) %>% 
-      mutate(d_f1 = d_f1 - sim_f1)
+      select(d_f1 = estimate, t_f1 = "statistic",  df_f1 = parameter, p_f1 = p.value) %>% 
+      mutate(d_f1 = d_f1 - sim_f1$sim_f1)
     
+    tt2 <- t.test(ret$norm_dist, mu = sim_f1$norm_dist) %>% 
+      broom::tidy() %>% 
+      select(d_nd = estimate, t_nd = "statistic",  df_nd = parameter, p_nd = p.value) %>% 
+      mutate(d_nd = d_nd - sim_f1$norm_dist)
     ret <- ret %>% 
       summarise(across(c("MAE","MAS","MAX", "d_n"), 
                        list("mean" = mean)
       ), 
       across(c("norm_dist", "sim_f1"),
              list("mean" = mean,  "ci95" = ci95_str)
-      )) %>% bind_cols(tt)  
+      )) %>% bind_cols(tt1, tt2)  
     
   }
   ret
@@ -552,7 +566,7 @@ get_segmentation_stats <- function(boundary_data = all_boundaries,
   start <- 0 
   #thresholds <- c("0", "Mean")
   thresholds <- c("mean")
-  ground_truth <- ground_truth %>% filter(boundary_type != "ending")
+  #ground_truth <- ground_truth %>% filter(boundary_type != "ending")
   map_dfr(pieces, function(pi){
     end <- piece_durations[pi]
     gt <- ground_truth %>% filter(piece == pi)

@@ -1,0 +1,36 @@
+---
+title: "Form perception in classical music: Listeners ratings, mmusic theoretical predictions"
+output: word_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE, warnings = FALSE, message = FALSE)
+options(tidyverse.quite = T)
+library(tidyverse)
+source("analysis.R")
+source("workspace_analysis.R")
+setup_workspace()
+seg_stats_new3 <- get_segmentation_stats(ground_truth = ground_truth %>% filter(level < 3), band_widths = seq(0.5, 4, .25))
+
+```
+
+# Method
+In an online and a lab experiment, participant were asked to mark sections or segments in two pieces of classical music, concurrently to hearing the piece. In the lab version, participants also were asked further questions on the nature of their segmentation mark. There were a total `r n_distinct(metadata$p_id)` participants (`r as.numeric(table(metadata$gender)["female"])` female), with `r n_distinct(metadata[metadata$source == "lab",]$p_id)` in the lab version and `r n_distinct(metadata[metadata$source == "online",]$p_id)` in the online version. Mean age was `r round(mean(metadata$age, na.rm = T), 1)` (SD = `r round(sd(metadata$age, na.rm = T),1)`). Mean GoldMSI was `r round(mean(metadata$GMS.general, na.rm = T), 1)` (SD = `r round(sd(metadata$GMS.general, na.rm = T), 1)`).
+
+We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  participants from the online version due to missing data (no markers were given).
+
+
+## Procedure
+
+
+```{r piece_stats}
+```
+
+
+
+```{r demo1, fig.cap = "Figure 1. Pitch precision for condition, day, piece and headset (singer)", fig.width = 12, fig.height = 8, include = T}
+
+```
+
+### Intonation
+

@@ -13,9 +13,11 @@ setup_workspace <- function(){
   
   metadata <- bind_rows(
     readr::read_csv("data/part2_metadata_lab.csv") %>% 
-      mutate(source = "lab"),
+      mutate(source = "lab", 
+             GMS.general = GMS.general/19),
     readr::read_csv("data/part2_metadata_online.csv") %>% 
-      mutate(source = "online", piece = str_extract(stimulus, "01|02") %>% as.integer()),
+      mutate(source = "online", 
+             piece = str_extract(stimulus, "01|02") %>% as.integer()),
   ) %>% select(-stimulus, -part)
   
   all_boundaries <- bind_rows(
