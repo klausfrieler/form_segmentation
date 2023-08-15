@@ -8,7 +8,6 @@ setup_workspace <- function(part1_results = "data/part1", part2_results = "data/
 
 read_part1_data <- function(result_dir = "data/part1"){
   messagef("Setting up part1 data from %s", result_dir)
-  
   part1_all <- MSM::read_MSM_data(result_dir, expand_markers = T) 
   part1_all <- part1_all %>% 
     left_join(part1_all %>% 
@@ -33,10 +32,16 @@ read_part2_data <- function(result_dir = "data/part2"){
     filter(lubridate::day(time_ended) > 20 | lubridate::month(time_ended) >= 6)
   part2_all <- part2_all %>% 
     left_join(part2_all %>% 
-                group_by(p_id) %>% mutate(d = c(diff(marker), NA)) %>% 
-                summarise(d = mean(d, na.rm = T), m = max(marker), .groups ="drop"), 
+                group_by(p_id) %>% 
+                mutate(d = c(diff(marker), NA)) %>% 
+                summarise(d = mean(d, na.rm = T), 
+                          s = mean(sign(d) < 0), 
+                          m = max(marker), .groups ="drop"), 
               by = "p_id")
-  part2_meta <- part2_all %>% distinct(p_id, stimulus, count, difficulty, liking, age, gender, GMS.general)%>% 
+  browser()
+  
+  part2_meta <- part2_all %>% 
+    distinct(p_id, stimulus, count, difficulty, liking, age, gender, GMS.general)%>% 
     mutate(part = "PART2")
   part2 <- part2_all %>% 
     filter(m > 200, !is.na(d), marker < 450)

@@ -204,7 +204,7 @@ server <- function(input, output, session) {
    })
    
    current_ground_truth <- reactive({
-      gt <- ground_truth %>% filter(boundary_type != "ending")
+      gt <- ground_truth
       if(input$add_ground_truth){
          if(input$random_gt){
             gt <- g_random_ground_truth
@@ -244,8 +244,7 @@ server <- function(input, output, session) {
          external_markers <- gt %>% 
             filter(piece == as.integer(input$piece), 
                    level <= as.integer(input$max_level), 
-                   theory == 1,
-                   boundary_type != "ending")
+                   theory == 1)
       }
       #messagef("Max level (slider): %s, max level (data): %s", input$max_level, max(external_markers$level))
       if(input$plot_type == "gauss"){

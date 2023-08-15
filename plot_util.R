@@ -145,3 +145,40 @@ plot_dtw_alignment <- function(x, y = NULL){
   
 }
 
+
+plot_bandwidth <- function(data = seg_stats, base_size  = 11, type = "F1"){
+  tmp <- data %>% 
+    mutate(max_level = factor(max_level), piece = sprintf("Piece %s", piece), psig = p_nd < .05, 
+           sdf = (d_nd < 0), rel = 2 *(sdf) + psig, 
+           relation = factor(rel, 
+                             labels = c("smaller non-sig", "greater  (sig.)", "smaller (non-sig)", "greater (sig)")), 
+           max_level = sprintf("Level %d", max_level), 
+           sig_str = factor(psig, labels = c("Non-sig", "Sig"))) 
+  
+  if(type == "F1"){
+    tmp <- tmp  %>%  
+      select(sigma, max_level, piece, sim_f1, sim_f1_mean, relation, sig_str)
+  }
+  else{
+    tmp <- tmp %>% 
+      select(sigma, max_level, piece, sim_f1 = norm_dist, sim_f1_mean = norm_dist_mean, relation, sig_str) 
+  }
+    
+  tmp <- tmp %>% 
+    pivot_longer(-c(sigma, max_level, piece, relation, sig_str)) %>% 
+    mutate(name = factor(name, labels = c("Theory 1", "Random (N = 25)")))
+  
+  q <- tmp %>%  
+    ggplot(aes(x = sigma, y = value, color = name)) 
+  q <- q + geom_point(aes(shape = sig_str)) 
+  q <- q + geom_line() 
+  q <- q + facet_grid(piece ~ factor(max_level)) 
+  q <- q + theme_bw(base_size = base_size)
+  q <- q + theme(legend.title = element_blank(), 
+                 legend.position = "bottom", 
+                 strip.background = element_rect(fill = "white")) 
+  q <- q + labs(x = "Bandwidth (sec)", y = "Normalized Distance (sec)") 
+  q <- q + scale_color_brewer(palette = "Set1")
+  q <- q  + geom_smooth(method = "lm", formula = "y ~ poly(x,2)")
+  q
+}

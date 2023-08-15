@@ -142,7 +142,9 @@ get_cond_prob_baseline <- function(boundary_data, ground_truth, piece = 1:2, max
             pull(counts) %>% 
             mean()})
         
-        t.test(baseline, mu = mu) %>% broom::tidy() %>% mutate(win_size = ws, piece = pi, max_level = ml, mu = mu)
+        t.test(baseline, mu = mu) %>% 
+          broom::tidy() %>% 
+          mutate(win_size = ws, piece = pi, max_level = ml, mu = mu)
       })
       
     })
@@ -350,7 +352,9 @@ get_best_alignment <- function(query, target){
 }
 
 simulate_segmentation <- function(mean_log_isi = 1.5, sd_log_isi = .5,  n_seg = 100, max_t = 420){
+  messagef("Simulate segmentation, mean = %.2f, sd = %.2f, max = %.2f", mean_log_isi, sd_log_isi, max_t)
   isi <- rnorm(n_seg, mean_log_isi, sd_log_isi) %>% exp()
+  #print(isi)
   t <- cumsum(c(0, isi))
   t[t < max_t]
 }
@@ -363,11 +367,13 @@ simulate_segmentation_from_groundtruth <- function(ground_truth,
   gt_log_ioi <- ground_truth %>% 
     filter(level <= max_level, 
            piece == !!piece, 
-           theory == !!theory, 
-           boundary_type != "ending") %>% pull(time_in_s) %>% diff() %>% log()
+           theory == !!theory) %>% 
+    pull(time_in_s) %>% 
+    diff() %>% 
+    log()
   map_dfr(1:size, function(i){
     tibble(time_in_s = simulate_segmentation(mean(gt_log_ioi), 
-                        sd(log(gt_log_ioi)), 
+                        sd(gt_log_ioi), 
                         round(1.1 * length(gt_log_ioi)), 
                         piece_durations[piece]),
            p_id = i)
@@ -381,16 +387,16 @@ simulate_ground_truth <- function(ground_truth,
   gt_log_ioi <- ground_truth %>% 
     filter(level <= max_level, 
            piece == !!piece, 
-           theory == !!theory, 
-           boundary_type != "ending") %>% 
+           theory == !!theory) %>% 
     pull(time_in_s) %>% 
     diff() %>% 
     log()
+  
   ret <-  tibble(time_in_s = simulate_segmentation(mean(gt_log_ioi), 
-                                                   sd(log(gt_log_ioi)), 
+                                                   sd(gt_log_ioi), 
                                                    round(1.5 * length(gt_log_ioi)), 
                                                    piece_durations[piece]))
-  #messagef("sgr: %d", nrow(ret))
+  messagef("d_l: %.1f", 100*(length(gt_log_ioi) - nrow(ret))/length(gt_log_ioi))
   ret %>% mutate(boundary = 1, 
                  beginning = 0, 
                  ending = 0, 
@@ -470,8 +476,7 @@ compare_segmentations <- function(segs = boundaries_lab,
            piece == !!piece, 
            theory == !!theory, 
            time_in_s >= start, 
-           time_in_s <= end,
-           boundary_type != "ending") %>% 
+           time_in_s <= end) %>% 
     pull(time_in_s)
   save(part_boundaries, gt_boundaries, file = "tmp.rda")
   
@@ -500,27 +505,27 @@ get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, st
     mean(x, na.rm = T) + b * se(x, na.rm = T)
   }
   ci95_low <- function(x) ci95(x, "low")
-  ci95_up <- function(x) ci95(x, "up")
+  ci95_up  <- function(x) ci95(x, "up")
   ci95_str <- function(x){
     sprintf("[%.2f, %.2f]", ci95_low(x), ci95_up(x))
   }
   ret <- 
     map_dfr(1:size, function(i){
-    gt <- simulate_ground_truth(ground_truth, 
-                                piece = as.integer(piece),
-                                max_level = as.integer(max_level),
-                                theory = 1) 
-    compare_segmentations(segs = boundary_data, 
-                          gt = gt, 
-                          piece = as.integer(piece), 
-                          theory = 1, 
-                          max_level = as.numeric(max_level),
-                          start = as.numeric(start),
-                          end = as.numeric(end),
-                          sigma = as.numeric(sigma), 
-                          threshold = threshold,
-                          with_plot = F) %>% pluck("summary")
-    
+      gt <- simulate_ground_truth(ground_truth, 
+                                  piece = as.integer(piece),
+                                  max_level = as.integer(max_level),
+                                  theory = 1) 
+      compare_segmentations(segs = boundary_data, 
+                            gt = gt, 
+                            piece = as.integer(piece), 
+                            theory = 1, 
+                            max_level = as.numeric(max_level),
+                            start = as.numeric(start),
+                            end = as.numeric(end),
+                            sigma = as.numeric(sigma), 
+                            threshold = threshold,
+                            with_plot = F) %>% pluck("summary")
+      
   })
   sim_f1 <-     compare_segmentations(segs = boundary_data, 
                                       gt = ground_truth, 
@@ -566,7 +571,6 @@ get_segmentation_stats <- function(boundary_data = all_boundaries,
   start <- 0 
   #thresholds <- c("0", "Mean")
   thresholds <- c("mean")
-  #ground_truth <- ground_truth %>% filter(boundary_type != "ending")
   map_dfr(pieces, function(pi){
     end <- piece_durations[pi]
     gt <- ground_truth %>% filter(piece == pi)
