@@ -13,6 +13,12 @@ messagef <- function(...) message(sprintf(...))
 printf <- function(...) print(sprintf(...))
 select <- dplyr::select
 
+remove_doublets<- function(str){
+  str <- as.character(str)
+  str[str == lag(str)] <- ""
+  str
+}
+
 get_arg_max <- function(x){
   d_x <- sign(diff(x))
   dd_x <- diff(d_x)
@@ -623,4 +629,30 @@ get_segmentation_stats <- function(boundary_data = all_boundaries,
   })
   
 
+}
+
+get_boundary_stats <- function(){
+  tmp <- 
+    all_boundaries %>% 
+    mutate(level = 1, 
+           theory = 1,
+           boundary_type = "both",
+           trial_id = sprintf("%s_%s_%s_%s", p_id, piece, trial, level)) %>% 
+    bind_rows(bind_rows(
+      ground_truth %>% filter(level == 1),
+      ground_truth %>% filter(level <= 2) %>% mutate(level = 2)
+    )%>% 
+      mutate(source = "theory", 
+             trial = 1, 
+             p_id = "T01", 
+             trial_id = sprintf("%s_%s_%s_%s", p_id, piece, trial, level))) %>% 
+    ungroup() %>% 
+    group_by(trial_id) %>% 
+    mutate(isi = c(diff(time_in_s), NA),
+           m = mean(isi, na.rm = T), 
+           s = sd(isi, na.rm = T),
+           log_m = log(m),
+           log_sd = log(s), .groups = "drop",
+           label = 1:n())
+  tmp
 }

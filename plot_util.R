@@ -148,20 +148,28 @@ plot_dtw_alignment <- function(x, y = NULL){
 
 plot_bandwidth <- function(data = seg_stats, base_size  = 11, type = "F1"){
   tmp <- data %>% 
-    mutate(max_level = factor(max_level), piece = sprintf("Piece %s", piece), psig = p_nd < .05, 
-           sdf = (d_nd < 0), rel = 2 *(sdf) + psig, 
-           relation = factor(rel, 
-                             labels = c("smaller non-sig", "greater  (sig.)", "smaller (non-sig)", "greater (sig)")), 
+    mutate(max_level = factor(max_level), 
+           piece = sprintf("Piece %s", piece), 
+           psig = p_nd < .05, 
+           sdf = (d_nd < 0), 
+           rel = 2 *(sdf) + psig, 
+           relation = factor(rel, levels = 0:3,
+                             labels = c("smaller non-sig", 
+                                        "greater  (sig.)", 
+                                        "smaller (non-sig)", 
+                                        "greater (sig)")), 
            max_level = sprintf("Level %d", max_level), 
            sig_str = factor(psig, labels = c("Non-sig", "Sig"))) 
   
   if(type == "F1"){
     tmp <- tmp  %>%  
       select(sigma, max_level, piece, sim_f1, sim_f1_mean, relation, sig_str)
+    ylab <- "F1"
   }
   else{
     tmp <- tmp %>% 
       select(sigma, max_level, piece, sim_f1 = norm_dist, sim_f1_mean = norm_dist_mean, relation, sig_str) 
+    ylab <- "Normalized Distance (sec)"
   }
     
   tmp <- tmp %>% 
@@ -177,8 +185,35 @@ plot_bandwidth <- function(data = seg_stats, base_size  = 11, type = "F1"){
   q <- q + theme(legend.title = element_blank(), 
                  legend.position = "bottom", 
                  strip.background = element_rect(fill = "white")) 
-  q <- q + labs(x = "Bandwidth (sec)", y = "Normalized Distance (sec)") 
+  q <- q + labs(x = "Bandwidth (sec)", y = ylab) 
   q <- q + scale_color_brewer(palette = "Set1")
   q <- q  + geom_smooth(method = "lm", formula = "y ~ poly(x,2)")
+  q
+}
+
+plot_isi_dist <- function(data = all_boundaries, ground_truth = ground_truth ){
+  bs <- get_boundary_stats() %>% 
+    mutate(piece = piece_names[piece], 
+           Trial = sprintf("Trial %s", trial))
+        
+  theory_means = bs %>% 
+    filter(source == "theory", level == 1) %>% 
+    group_by(piece) %>% 
+    summarise(m_theory = mean(log_m), .groups = "drop") 
+  
+  q <- bs %>%
+    filter(source != "theory") %>% 
+    distinct() %>% 
+    ggplot(aes(x = log_m, y = after_stat(count),  fill = Trial)) 
+  
+  q <- q + geom_histogram(color = "black")
+  q <- q + facet_grid(source ~ piece) 
+  q <- q + xlim(-3, 6)  
+  q <- q + geom_vline(data = theory_means, aes(xintercept = m_theory), linewidth = 1, linetype = "dotted")
+  q <- q + theme_bw() 
+  q <- q + theme(legend.title = element_blank(), 
+             strip.background = element_rect(fill = "white")) 
+  q <- q + scale_fill_brewer(palette = "Set1") 
+  q <- q + labs(x = "Log ISI")
   q
 }

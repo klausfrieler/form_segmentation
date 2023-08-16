@@ -1,6 +1,18 @@
 library(tidyverse)
 
 piece_durations <- c(322, 421)
+
+read_new_ground_truth <- function(){
+  gt  <- bind_rows(read_csv2("data/raw/boundaries_stim1_figureklaus.csv", col_types = "nnnnnn")  %>% 
+                     mutate(time_in_s = time_in_s/1000, piece = 1), 
+                   read_csv2("data/raw/boundaries_stim2_figureklaus.csv", col_types = "nnnnnn")  %>% 
+                     mutate(time_in_s = time_in_s/1000, piece = 2)) %>% 
+    mutate(boundary_type = factor(sprintf("%s%s%s", beginning, ending, both), 
+                                  labels = c("both", "ending", "beginning")), 
+           theory = 1) %>% 
+    select(-c(beginning, ending, both))
+  gt
+}
 prepare_workspace <- function(){
   online_data <- list.files("data/part2/", pattern = "*.rds", full.names = T)
   map_dfr(online_data, function(x){
@@ -24,7 +36,7 @@ prepare_workspace <- function(){
 fix_part2_data <- function(part2_data){
   part2_data <- part2_data %>% filter(count > 1) 
   #browser()
-  
+  #for unknown reasons some session had the same psychTestR p_id, which should not happen at all, so here we go
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 4.611111) < .01,]$p_id <- "OP05-1"
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 3.722222) < .01,]$p_id <- "OP05-2"
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 2.166667) < .01,]$p_id <- "OP05-3"
@@ -32,6 +44,7 @@ fix_part2_data <- function(part2_data){
   part2_data[part2_data$p_id == "OP17" & abs(part2_data$GMS.general - 3.277778) < .01,]$p_id <- "OP17-1"
   part2_data[part2_data$p_id == "OP17" & abs(part2_data$GMS.general - 5.222222) < .01,]$p_id <- "OP17-2"
   
+  #also some marker seem to be IOI instead of absolute time points, we fixed those that can be fixed
   bad_ids <- part2_data %>% group_by(p_id) %>% summarise(s = mean(diff(marker) < 0, na.rm = T)) %>% filter(s > 0) %>% pull(p_id)
   map_dfr(unique(part2_data$p_id), function(pid){
     tmp <- part2_data %>% filter(p_id == pid)

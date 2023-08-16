@@ -7,10 +7,13 @@ output: word_document
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE, warnings = FALSE, message = FALSE)
 options(tidyverse.quite = T)
 library(tidyverse)
+library(flextable)
 source("analysis.R")
 source("workspace_analysis.R")
+source("plot_util.R")
 setup_workspace()
-seg_stats_new3 <- get_segmentation_stats(ground_truth = ground_truth %>% filter(level < 3), band_widths = seq(0.5, 4, .25))
+piece_names <- c("Louise Farrenc, Nonet, 1st mov", "John K. Paine, Symphony No. 1, 1st mov")
+#seg_stats_new3 <- get_segmentation_stats(ground_truth = ground_truth %>% filter(level < 3), band_widths = seq(0.5, 4, .25))
 
 ```
 
@@ -20,17 +23,61 @@ In an online and a lab experiment, participant were asked to mark sections or se
 We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  participants from the online version due to missing data (no markers were given).
 
 
-## Procedure
+## Analysis
+Our main data are time positions, measured in seconds from the start of a piece. In the lab experiment, the participants completed two trials for each piece, whereas in the online version, they completed only one. Additionally, we analyzed the pieces with respect to endings and beginnings based on music theory, using two different levels of granularity.
+
+```{r piece_stats, }
+get_boundary_stats() %>% 
+  group_by(piece, source, trial, level) %>% 
+  summarise(n_p = n_distinct(p_id), 
+            n = n_distinct(time_in_s),
+            mean_isi = round(mean(m), 1),
+            sd_isi =  round(mean(s, na.rm =T), 1),
+            .groups = "drop") %>% 
+  arrange(piece, source, trial) %>%
+  mutate(piece = piece_names[piece] %>% remove_doublets(), 
+         source = remove_doublets(source) 
+         #level = remove_doublets(level),
+         #trial = remove_doublets(trial)
+         ) %>% 
+  flextable() %>% 
+  set_header_labels(values = list(piece = "Piece", 
+                                  source = "Source", 
+                                  trial = "Trial", 
+                                  level = "Level", 
+                                  n_p = "No. participants", 
+                                  n = "No of time markers",
+                                  mean_isi = "Mean ISI (s)",
+                                  sd_isi = "SD ISI (s)")) %>% 
+  set_caption("Tab. 1. Overview of time marker data.") %>% 
+  add_footer_lines("Note: ISI = inter segment interval.") %>% 
+  fontsize(i = NULL, j = NULL, size = 8, part = "all") %>% 
+  autofit()
+```
+
+Notable, the level 2 segments from the music theoretial analysis have much smaller ISI (intersegment interval) than all other data. The distribution of ISI can be found in Fig. 1. Here, we used the logarithm of ISI, to make the distribution more close to a normal distribution. This means that the ISIs seems to follow roughly a log-normal distribution. The same holds true for the theoretical segments.
 
 
-```{r piece_stats}
+```{r isi_dist, fig.cap = "Figure 1. Distribitution of intersegment intervals.", fig.width = 12, fig.height = 8, include = T}
+plot_isi_dist() + labs(subtitle = "Dotted lines are theory means")
+
 ```
 
 
+We also checked whether the participant mean log ISIs were also different between pieces and trials using a linear mixed model with random effects for participants and an interaction of piece and trial. The results can be seen in Tab. 2. Indeed, the mean log ISI are different between pieces and trials. Indeed, all coefficients are significant. The second piece had generally longer ISIs ans the first piece, and second trials as well, though the increase is a bit smaller for the second piece. 
 
-```{r demo1, fig.cap = "Figure 1. Pitch precision for condition, day, piece and headset (singer)", fig.width = 12, fig.height = 8, include = T}
+```{r lm_piece_trial}
+mod <- all_boundaries %>% 
+  mutate(trial = factor(trial), piece = factor(piece)) %>% 
+  group_by(p_id, trial, piece) %>% 
+  
+  summarise(m = log(mean(diff(time_in_s))), .groups = "drop") %>% 
+  lmerTest::lmer(log(m) ~ 0 + piece * trial + (1|p_id), data = .) 
 
+mod %>% broom.mixed::tidy() %>% 
+  mutate(across(where(is.numeric), function(.x) round(.x, 3) )) %>%
+  flextable() %>% 
+  fontsize(i = NULL, j = NULL, size = 8, part = "all") %>% 
+  autofit() %>% 
+  set_caption("Tab. 2. Linear mixed model of log ISI for piece and trial")
 ```
-
-### Intonation
-
