@@ -86,14 +86,14 @@ gaussification <- function(onsets, deltaT = 0.1, sigma = 5, weights = NULL, star
   }
   time_points <- seq(start, end, deltaT)
   if(use_rect_func){
-    singles <- map(seq_along(onsets), function(i){
+    singles <- purrr::map(seq_along(onsets), function(i){
       weights[i] * rect_func(time_points, onsets[i], half_width = sigma)
     })
     
   }
   else{
     sig_fact <- 1/sigma/sigma 
-    singles <- map(seq_along(onsets), function(i){
+    singles <- purrr::map(seq_along(onsets), function(i){
       weights[i] * exp( -.5 * (onsets[i] - time_points) * (onsets[i] - time_points)*sig_fact)
     })
     
@@ -160,16 +160,23 @@ get_cond_prob_baseline <- function(boundary_data, ground_truth, piece = 1:2, max
 
 get_sims <- function(time_points, 
                      ground_truth, 
-                     start = 0,  end = 330, bw = 1, 
-                     resample_window = 0, resample_shift = 3, with_overlap = T){
-  #browser()
+                     start = 0,  end = 330, 
+                     bw = 1, 
+                     resample_window = 0, 
+                     resample_shift = 3, 
+                     with_overlap = T){
+  browser()
   bin_v <- hist(time_points[time_points>= start & time_points <= end], breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
   bin_gt <- hist(ground_truth[ground_truth >= start & ground_truth <= end], breaks = seq(from = start, to = end + bw, by = bw), plot = FALSE)$counts
   if(with_overlap){
     # print(ground_truth)
     # messagef("start = %.2f / %.2f end = %.2f / %.2f, maxgt = %.2f", start, start - bw/2, end, end + bw/2, max(ground_truth[ground_truth >= start & ground_truth <= end]))
-    bin_v_2 <- hist(time_points[time_points>= start & time_points <= end], breaks = seq(from = start - bw/2, to = end + bw, by = bw), plot = FALSE)$counts
-    bin_gt_2 <- hist(ground_truth[ground_truth >= start & ground_truth <= end], breaks = seq(from = start - bw/2, to = end + bw, by = bw), plot = FALSE)$counts
+    bin_v_2 <- hist(time_points[time_points>= start & time_points <= end], 
+                    breaks = seq(from = start - bw/2, to = end + bw, by = bw), 
+                    plot = FALSE)$counts
+    bin_gt_2 <- hist(ground_truth[ground_truth >= start & ground_truth <= end], 
+                     breaks = seq(from = start - bw/2, to = end + bw, by = bw), 
+                     plot = FALSE)$counts
     #messagef("Length difference: %d last1 = %d, last2 = %d", length(bin_v) - length(bin_v_2), bin_v[length(bin_v)], bin_v_2[length(bin_v_2)])
     l <- min(length(bin_v), length(bin_v_2))
     bin_v <- bin_v[1:l]  + bin_v_2[1:l]
@@ -306,9 +313,14 @@ get_sims_by_gaussification <- function(onsets1, onsets2, sigma = 1, deltaT = .1,
   peaks1 <- get_gaussification_peaks(g1)
   peaks2 <- get_gaussification_peaks(g2)
   get_sims(peaks1, peaks2, start = start, end = end, bw = sigma)
-  
 }
 
+get_gaussification_sd <- function(onsets, sigma = 1, deltaT = .1, start = 0, end = 300){
+  #browser()
+  g <- gaussification(onsets, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+  peaks <- get_gaussification_peaks(g)
+  g %>% filter(t %in% peaks) %>% pull(val) %>% sd(na.rm = T) 
+}
 
 #' get_best_alignment: Calc best DTW alignment between to timelines and optional features derived from this 
 #'
@@ -387,9 +399,9 @@ simulate_segmentation_from_groundtruth <- function(ground_truth,
 }
 
 simulate_ground_truth <- function(ground_truth, 
-                                 piece = 1, 
-                                 theory = 1, 
-                                 max_level = 3){
+                                  piece = 1, 
+                                  theory = 1, 
+                                  max_level = 3){
   gt_log_ioi <- ground_truth %>% 
     filter(level <= max_level, 
            piece == !!piece, 
@@ -423,13 +435,18 @@ simulate_segmentation_from_data <- function(segments = boundaries_lab,
                                             min_value = 0)
 {
   #browser()
+  # log_part_isi <- segments %>% 
+  #   filter(piece == !!piece, trial == !!trial) %>% 
+  #   pull(time_in_s) %>% 
+  #   gaussification(end = piece_durations[piece] + 1, sigma = sigma) %>% 
+  #   get_gaussification_peaks(with_plot = F, min_value = min_value) %>% 
+  #   diff() %>% 
+  #   log()
   log_part_isi <- segments %>% 
-    filter(piece == !!piece, trial == !!trial) %>% 
-    pull(time_in_s) %>% 
-    gaussification(end = piece_durations[piece] + 1, sigma = sigma) %>% 
-    get_gaussification_peaks(with_plot = F, min_value = min_value) %>% 
-    diff() %>% 
-    log()
+    filter(piece == !!piece, trial == !!trial) %>%
+    group_by(p_id) %>% 
+    summarise(m = mean(log(diff(time_in_s)), na.rm = T)) %>% 
+    pull(m) 
   #browser()
   messagef("Simulating data with %d peaks for bw = %.2f, mean log ISI = %.2f, mean ISI = %.2f, sd log ISI = %.2f", 
            length(log_part_isi), sigma, mean(log_part_isi), exp(mean(log_part_isi)), sd(log_part_isi))
@@ -468,7 +485,7 @@ compare_segmentations <- function(segs = boundaries_lab,
                                   threshold = 0, 
                                   with_plot = F,
                                   only_plot = F){
-  #browser()
+  browser()
   if(is.null(end)){
     end <- piece_durations[piece] + 1
   }
@@ -477,6 +494,7 @@ compare_segmentations <- function(segs = boundaries_lab,
     pull(time_in_s) %>% 
     gaussification(start = start, end = end, sigma = sigma) %>% 
     get_gaussification_peaks(with_plot = F, min_value = threshold)
+  
   gt_boundaries <- gt %>% 
     filter(level <= max_level, 
            piece == !!piece, 
@@ -520,7 +538,7 @@ get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, st
       gt <- simulate_ground_truth(ground_truth, 
                                   piece = as.integer(piece),
                                   max_level = as.integer(max_level),
-                                  theory = 1) 
+                                  theory = 1) %>% mutate(type = "simulation")
       compare_segmentations(segs = boundary_data, 
                             gt = gt, 
                             piece = as.integer(piece), 
@@ -595,7 +613,7 @@ get_segmentation_stats <- function(boundary_data = all_boundaries,
             else{
               bd_loc <- bd
             }
-            messagef("Check bw = %.2f [size = %d], piece = %s, trial = %s, max_level = %d, threshold = %s", bw, baseline_size, pi, tri, ml, thr)
+            messagef("Checking bw = %.2f [size = %d], piece = %s, trial = %s, max_level = %d, threshold = %s", bw, baseline_size, pi, tri, ml, thr)
             bl <- get_baseline(bd_loc,
                                gt, 
                                baseline_size, 
@@ -622,8 +640,7 @@ get_segmentation_stats <- function(boundary_data = all_boundaries,
                    max_level = ml,
                    sigma = bw) %>% bind_cols(bl, f1)  
           })
-          
-          })
+        })
       })
     })
   })

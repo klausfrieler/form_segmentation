@@ -15,7 +15,7 @@ plot_marker <- function(data = part2){
 plot_gaussification <- function(data = boundaries_lab, 
                                 sigma = 2, 
                                 deltaT = .1, 
-                                start = -1, end = 450, 
+                                start = 0, end = 450, 
                                 threshold = NULL,
                                 with_markers = F,
                                 only_markers = F, 
@@ -24,13 +24,13 @@ plot_gaussification <- function(data = boundaries_lab,
     if(!("marker" %in% names(data))){
       data <- data %>% rename(marker = time_in_s)
     }
-    
     combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
   }
   else{
     combined_marker <- gaussification(data, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
     
   }
+  #browser()
   #print(get_gaussification_peaks(combined_marker))
   #peaks <- tibble(w = get_gaussification_peaks(combined_marker))
   q <- combined_marker %>% ggplot(aes(x = t, y = val))
@@ -50,11 +50,9 @@ plot_gaussification <- function(data = boundaries_lab,
   }
   else{
     peaks <- tibble(w = get_gaussification_peaks(combined_marker))
-    
   }
-  if(with_markers){
-    q <- q + geom_vline(data = peaks %>% filter(w >= start, w <= end), aes(xintercept = w), color = "lightblue4")
-  }
+  intercept <- 0
+  #browser()
   if(!is.null(threshold)){
     #browser()
     peaks <- get_gaussification_peaks(combined_marker)
@@ -65,6 +63,9 @@ plot_gaussification <- function(data = boundaries_lab,
     else if(threshold == "mean"){
       intercept <- mean(peak_vals)
     }
+    else if(threshold == "q75"){
+      intercept <- quantile(peak_vals)[4]
+    }
     else{
       intercept <- as.numeric(threshold)
       if(is.na(intercept)){
@@ -72,6 +73,13 @@ plot_gaussification <- function(data = boundaries_lab,
       }
     }
     q <- q + geom_hline(yintercept = intercept)
+  }
+  browser()
+  if(with_markers){
+    q <- q + geom_vline(data = combined_marker %>% 
+                          filter(val >= intercept, t %in% peaks, t >= start, t <= end), 
+                        aes(xintercept = t), 
+                        color = "lightblue4")
   }
   q <- q + theme_minimal() 
   q <- q + scale_color_brewer(palette = "RdBu") 

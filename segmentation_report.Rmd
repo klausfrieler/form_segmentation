@@ -24,6 +24,8 @@ We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  partic
 
 
 ## Analysis
+##General observations
+
 Our main data are time positions, measured in seconds from the start of a piece. In the lab experiment, the participants completed two trials for each piece, whereas in the online version, they completed only one. Additionally, we analyzed the pieces with respect to endings and beginnings based on music theory, using two different levels of granularity.
 
 ```{r piece_stats, }
@@ -63,16 +65,17 @@ plot_isi_dist() + labs(subtitle = "Dotted lines are theory means")
 
 ```
 
+Fig. 1 suggest that in the lab condition, the mean log ISIS might be bimodal. However, fitting a Gaussian mixture model using the ``Mclist`` pacakge did not corroborate this.
 
-We also checked whether the participant mean log ISIs were also different between pieces and trials using a linear mixed model with random effects for participants and an interaction of piece and trial. The results can be seen in Tab. 2. Indeed, the mean log ISI are different between pieces and trials. Indeed, all coefficients are significant. The second piece had generally longer ISIs ans the first piece, and second trials as well, though the increase is a bit smaller for the second piece. 
+We also checked whether the participant mean log ISIs were also different between pieces and trials using a linear mixed model with random effects for participants and an interaction of piece and trial and of piece and source. The results can be seen in Tab. 2. Indeed, the mean log ISI are different between pieces and trials. Indeed, all coefficients are significant. The second piece had generally longer ISIs ans the first piece, and second trials as well, though the increase is a bit smaller for the second piece. There was significant difference that in the online experiment the participants had slightly smaller ISIs for the first piece (`r piece_names[1]`). 
 
 ```{r lm_piece_trial}
 mod <- all_boundaries %>% 
   mutate(trial = factor(trial), piece = factor(piece)) %>% 
-  group_by(p_id, trial, piece) %>% 
+  group_by(p_id, trial, piece, source) %>% 
   
   summarise(m = log(mean(diff(time_in_s))), .groups = "drop") %>% 
-  lmerTest::lmer(log(m) ~ 0 + piece * trial + (1|p_id), data = .) 
+  lmerTest::lmer(log(m) ~ 0 + piece * (trial + source) + (1|p_id), data = .) 
 
 mod %>% broom.mixed::tidy() %>% 
   mutate(across(where(is.numeric), function(.x) round(.x, 3) )) %>%
@@ -81,3 +84,31 @@ mod %>% broom.mixed::tidy() %>%
   autofit() %>% 
   set_caption("Tab. 2. Linear mixed model of log ISI for piece and trial")
 ```
+
+## Interrater agreement and agreement with theory
+As the music theoretical predictions of segment border can be treated as "just another rater", the techniques applied for interrater agreement and agreement with theory are basically the same. The general problem here is the very fine grained resolution of 1 ms. Reaction times for humans are in the order of 500 ms, whereas intersegment intervals are in the order of several 10 seconds. This necessitates some form of binning or other bandwidth-based techniques, which introduces a free parameter a bin size or bandwidth, when comparing one of more segmentations. An alternative, parameter free techniques is dynamic time warping, which creates and aligment between to series of time points. However, for aggregating all participants segmenations in a single "collective" or average segmenation, a bandwidth parameter is still needed.
+Another problem is that segmentations are generally sparse in nature, typically in the order of  10 segments (mean number of segments = `r all_boundaries %>% group_by(p_id, piece, trial, source) %>% summarise(n = n(), .groups = "drop") %>% summarise(m_n = mean(n)) %>% pull(m_n)`) over a set of 322.000 to 421.000 thousand possible  points (using a millisecond resolution), Even after binning with a bandwidth of several seconds, this is still a problem. So, any metrics that counts true negatives is not well-suited as it will over estimated the agreement considerably. Another problem is to establish a suitable baseline to check whether the agreement is significantly different from a random segmentation.
+
+### Gaussification
+One method to move from a distribution of time points to a aggregated function is called Gaussification, which is a weighted sum of of Gaussians with the time points means and a free bandwidth parameter as standard deviations. If the weights are all equal then this is equivalent to a Gaussian kernel density estimation (up to normalization).
+
+Such a Gaussification (or probability denisty) then allows to create an aggregate segmentation by picking peaks (maxima). Another free parameter, a threshold can be used to filter the peaks further, e.g., keeping only the peaks with heights over the mean or the median of all peak heights or a fixed threshold. The is no one-to-one translation of peal height to number of participants, but approximately it can be said that the peak height is the averaged number of participants having a segmentation mark in a vicinity (with bandwith) of the peak. If N participants would have completely identical sets of segmentation marks, then this statement is exactly true, as one would add N (unnormalized) Gaussians over the same mean value in this case. The peak positions can also be approximately bve regarded as the mean position of segmentation markers in the vicinity of the peak, where the extension of the vicinity is determined by the bandwidth parameter. For a single segmentation the peaks of a Gaussification are obviously the segmentation marks themselves.
+
+### Dynamic Time Warping
+Dynamic time warping is a very power dynamic programming method to align to sets of points in a minimal depending on a cost function. The distances between align points can then be used as an indicator of similarity of the sets of time points. We used the ``dtw`` package for R, which returns a normalized distance value which we used for comparison. This value is depending on absolute offsets and time shifts, but we have here time points only between the start (0) and the end of the pieces (322 vs. 421 s), so this is not an issue.
+
+### F1 scores
+F1 scores is defined as the harmonic mean of specificity and sensitivity for two binary sequences. It can expressed as the ratio of true positives to the sum of true positives and the arithmetic mean of false positives and false negatives.For two binary sequences, i.e., sequences consisting only of 0's (representing absence of something) and 1's (representing the presence of something), then a true positive is a spot in the two sequences, when to 1's coincide. A false positive is when a 0 in one string matches a 1 in the other sequence, the same for a false negative but with sequences reversed. As the F1 scores is symmetric with regard to the sequences, it does not matter which sequences is regarded as the ground truth and which as the "query". 
+
+To use F1-scores as similarity measure for segmentations, the underlying time span need to identical and identically  binned into N bins of duration t_N. The bins needs can be overlapping or disjunct. For each bin a 1 is recorded if a segmentation mark is inside its boundary, or a 0 else. 
+
+#### Example: F1 scores
+One segmentation over the time span of 60 s has time points 10, 20, 30, 40, 50, whereas another one has 15, 25, 35, 45, 55. Covering the time span with 3 disjoint bins of 20 sec each (including the left and excluding the right boundary), translates the first segmentation into ``1, 1, 1`` and the second into ``0, 1, 1``. The number of true positives is 2, the number of false positives (or false negatives) is 1. This results in a F1 score of 
+``F1 = 2/(2 + .5*(1 + 0)) = 2/2.5 = .8)``. If we would have use a 5 sec bins, the first sequence would be have been translated to ``0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0`` an the second to ``0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1``, a complete different scenario, as there are no true positives now, so the F1 scores here would be 0. This illustrates quite clearly the influence of the bin size and problem of bin boundaries. In order to stabilize values, we will (logically) add two binary sequences resulting from the same binning but with half a bin size of overlap. This is equivalent to smearing out the bins in time.
+
+
+###Interrater Agreement
+The heights of the peaks vs. the height of the troughs of a Gaussification of set of segmentations can be regarded as a measure of interrater agreement. If there is a lot of agreement, then segmentations are close to each other resulting in higher peaks and lower troughs. Numerically this can be expressed as the standard deviations of all peak heights.
+
+
+

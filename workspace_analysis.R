@@ -35,7 +35,7 @@ prepare_workspace <- function(){
 
 fix_part2_data <- function(part2_data){
   part2_data <- part2_data %>% filter(count > 1) 
-  #browser()
+  browser()
   #for unknown reasons some session had the same psychTestR p_id, which should not happen at all, so here we go
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 4.611111) < .01,]$p_id <- "OP05-1"
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 3.722222) < .01,]$p_id <- "OP05-2"
@@ -43,6 +43,8 @@ fix_part2_data <- function(part2_data){
 
   part2_data[part2_data$p_id == "OP17" & abs(part2_data$GMS.general - 3.277778) < .01,]$p_id <- "OP17-1"
   part2_data[part2_data$p_id == "OP17" & abs(part2_data$GMS.general - 5.222222) < .01,]$p_id <- "OP17-2"
+  
+  part2_data <- part2_data %>% filter(p_id != "OP05" & p_id != "OP17")
   
   #also some marker seem to be IOI instead of absolute time points, we fixed those that can be fixed
   bad_ids <- part2_data %>% group_by(p_id) %>% summarise(s = mean(diff(marker) < 0, na.rm = T)) %>% filter(s > 0) %>% pull(p_id)
