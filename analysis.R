@@ -25,10 +25,14 @@ get_arg_max <- function(x){
   which(dd_x < 0) + 1
 }
 
-get_gaussification_peaks <- function(gauss_data, with_plot = F, min_value = 0){
+get_gaussification_peaks <- function(gauss_data, with_plot = F, min_value = 0, troughs = F, output = c("time", "values", "time_values")){
   #browser()
+  output <- match.arg(output)
   if(is.list(gauss_data) & "sum" %in% names(gauss_data)){
     gauss_data <- gauss_data[["sum"]]
+  }
+  if(troughs){
+    gauss_data$val <- -gauss_data$val
   }
   peak_pos <- get_arg_max(gauss_data$val)  
   values <- gauss_data[peak_pos,]$val
@@ -45,13 +49,32 @@ get_gaussification_peaks <- function(gauss_data, with_plot = F, min_value = 0){
     }
   }
   #browser()
-  filtered_pos <- intersect(peak_pos, which(gauss_data$val >= threshold))
+  if(troughs){
+    filtered_pos <- intersect(peak_pos, which(gauss_data$val <= threshold))
+  }
+  else{
+    filtered_pos <- intersect(peak_pos, which(gauss_data$val >= threshold))
+  }
   t_max <- gauss_data[filtered_pos,]$t
+  
+  if(troughs){
+    gauss_data$val <- -gauss_data$val 
+  }
+
+  if(output == "time"){
+    ret <- t_max    
+  }
+  else if(output == "values"){
+    ret <- gauss_data[filtered_pos,]$val
+  }
+  else if(output == "time_values"){
+    ret <- gauss_data[filtered_pos,]
+  }
   if(with_plot){
     q <- ggplot(gauss_data, aes(x = t, y = val)) + geom_line() + geom_vline(data = tibble(x = t_max), aes(xintercept = x))
     print(q)
   }
-  t_max
+  ret
 }
 
 rect_func <- function(t, t0, half_width = .5){
@@ -322,6 +345,24 @@ get_gaussification_sd <- function(onsets, sigma = 1, deltaT = .1, start = 0, end
   g %>% filter(t %in% peaks) %>% pull(val) %>% sd(na.rm = T) 
 }
 
+get_gaussification_peakiness <- function(onsets, n_rater = 1, sigma = 1, deltaT = .1, start = 0, end = 300){
+  #browser()
+  g <- gaussification(onsets, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+  if(is.null(g) || is.na(g)|| length(g) == 0 || nrow(g) == 0 || n_rater < 1){
+    return(NA)
+  }
+  peaks <- get_gaussification_peaks(g, output = "values")
+  troughs <- get_gaussification_peaks(g, troughs = T, output = "values")
+  (mean(peaks) - mean(troughs))/n_rater
+}
+
+get_peakiness_from_segmentation_ratings <- function(seg_data, piece = 1, trial = 1, source = NULL, sigma = 1){
+  seg_data <- seg_data %>% filter(piece == !!piece, trial == !!trial)
+  if(!is.null(source)){
+    seg_data <- seg_data %>% filter(source == !!source)
+  }
+  get_gaussification_peakiness(seg_data$time_in_s, n_rater = n_distinct(seg_data$p_id), end = piece_durations[piece])
+}
 #' get_best_alignment: Calc best DTW alignment between to timelines and optional features derived from this 
 #'
 #' @param query <dbl> List of onsets
@@ -370,7 +411,8 @@ get_best_alignment <- function(query, target){
 }
 
 simulate_segmentation <- function(mean_log_isi = 1.5, sd_log_isi = .5,  n_seg = 100, max_t = 420){
-  messagef("Simulate segmentation, mean = %.2f, sd = %.2f, max = %.2f", mean_log_isi, sd_log_isi, max_t)
+  #messagef("Simulate segmentation, mean = %.2f, sd = %.2f, max = %.2f", mean_log_isi, sd_log_isi, max_t)
+  #browser()
   isi <- rnorm(n_seg, mean_log_isi, sd_log_isi) %>% exp()
   #print(isi)
   t <- cumsum(c(0, isi))
@@ -450,14 +492,19 @@ simulate_segmentation_from_data <- function(segments = boundaries_lab,
   #browser()
   messagef("Simulating data with %d peaks for bw = %.2f, mean log ISI = %.2f, mean ISI = %.2f, sd log ISI = %.2f", 
            length(log_part_isi), sigma, mean(log_part_isi), exp(mean(log_part_isi)), sd(log_part_isi))
+  if(length(log_part_isi) == 0){
+    browser()
+  }
   map_dfr(1:size, function(i){
-    tibble(time_in_s = simulate_segmentation(mean(log_part_isi), 
+    ret <- 
+      tibble(time_in_s = simulate_segmentation(mean(log_part_isi), 
                                              sd(log_part_isi), 
                                              round(1.1 * length(log_part_isi)), 
                                              piece_durations[piece]),
            p_id = sprintf("S%02d", i), 
            piece = piece, 
            trial = trial)
+    ret
   })
 }
 
@@ -672,4 +719,27 @@ get_boundary_stats <- function(){
            log_sd = log(s), .groups = "drop",
            label = 1:n())
   tmp
+}
+
+test_peakiness_values <- function(seg_data = all_boundaries, size = 100, sigma = 2){
+  pieces <- unique(seg_data$piece)
+  map_dfr(pieces, function(p){
+    trials <- unique(seg_data[seg_data$piece == p,]$trial)
+    map_dfr(trials, function(tr){
+      #browser()
+      n_rater <- seg_data %>% filter(piece == p, trial == tr) %>% pull(p_id) %>% unique() %>% length()
+      map_dfr(sigma, function(s){
+        mu <- get_peakiness_from_segmentation_ratings(seg_data, piece = p, trial = tr, sigma = s)
+        sim <- map_dbl(1:size, function(x){
+          tmp <- simulate_segmentation_from_data(seg_data, piece = p, trial = tr)
+          get_peakiness_from_segmentation_ratings(tmp, piece = p, trial = tr, sigma = s)
+        })
+        #browser()
+        t.test(sim, mu = mu) %>% 
+          broom::tidy() %>% 
+          mutate(piece = p, trial = tr, sigma = s, size = size, mu = mu, n_rater = n_rater)
+        
+      })
+   })
+  })
 }

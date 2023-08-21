@@ -30,7 +30,7 @@ plot_gaussification <- function(data = boundaries_lab,
     combined_marker <- gaussification(data, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
     
   }
-  #browser()
+  browser()
   #print(get_gaussification_peaks(combined_marker))
   #peaks <- tibble(w = get_gaussification_peaks(combined_marker))
   q <- combined_marker %>% ggplot(aes(x = t, y = val))
