@@ -35,7 +35,7 @@ prepare_workspace <- function(){
 
 fix_part2_data <- function(part2_data){
   part2_data <- part2_data %>% filter(count > 1) 
-  browser()
+  #browser()
   #for unknown reasons some session had the same psychTestR p_id, which should not happen at all, so here we go
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 4.611111) < .01,]$p_id <- "OP05-1"
   part2_data[part2_data$p_id == "OP05" & abs(part2_data$GMS.general - 3.722222) < .01,]$p_id <- "OP05-2"

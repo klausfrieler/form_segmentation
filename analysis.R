@@ -353,7 +353,7 @@ get_gaussification_peakiness <- function(onsets, n_rater = 1, sigma = 1, deltaT 
   }
   peaks <- get_gaussification_peaks(g, output = "values")
   troughs <- get_gaussification_peaks(g, troughs = T, output = "values")
-  (mean(peaks) - mean(troughs))/n_rater
+  tibble(m_peaks = mean(peaks), m_roughs = mean(troughs), full = (mean(peaks) - mean(troughs))/n_rater, simple = m_peaks/n_rater, n_rater = n_rater)
 }
 
 get_peakiness_from_segmentation_ratings <- function(seg_data, piece = 1, trial = 1, source = NULL, sigma = 1){
@@ -721,7 +721,7 @@ get_boundary_stats <- function(){
   tmp
 }
 
-test_peakiness_values <- function(seg_data = all_boundaries, size = 100, sigma = 2){
+test_peakiness_values <- function(seg_data = all_boundaries, size = 100, sigma = 2, type = "simple"){
   pieces <- unique(seg_data$piece)
   map_dfr(pieces, function(p){
     trials <- unique(seg_data[seg_data$piece == p,]$trial)
@@ -729,10 +729,10 @@ test_peakiness_values <- function(seg_data = all_boundaries, size = 100, sigma =
       #browser()
       n_rater <- seg_data %>% filter(piece == p, trial == tr) %>% pull(p_id) %>% unique() %>% length()
       map_dfr(sigma, function(s){
-        mu <- get_peakiness_from_segmentation_ratings(seg_data, piece = p, trial = tr, sigma = s)
+        mu <- get_peakiness_from_segmentation_ratings(seg_data, piece = p, trial = tr, sigma = s) %>% pull(!!type)
         sim <- map_dbl(1:size, function(x){
           tmp <- simulate_segmentation_from_data(seg_data, piece = p, trial = tr)
-          get_peakiness_from_segmentation_ratings(tmp, piece = p, trial = tr, sigma = s)
+          get_peakiness_from_segmentation_ratings(tmp, piece = p, trial = tr, sigma = s) %>% pull(!!type)
         })
         #browser()
         t.test(sim, mu = mu) %>% 

@@ -15,26 +15,27 @@ plot_marker <- function(data = part2){
 plot_gaussification <- function(data = boundaries_lab, 
                                 sigma = 2, 
                                 deltaT = .1, 
-                                start = 0, end = 450, 
+                                start = 0, end = 422,
                                 threshold = NULL,
                                 with_markers = F,
                                 only_markers = F, 
-                                external_markers = NULL){
+                                external_markers = NULL,
+                                alpha = NULL){
+  #browser()
   if(is.data.frame(data)){
     if(!("marker" %in% names(data))){
       data <- data %>% rename(marker = time_in_s)
     }
-    combined_marker <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+    combined_markers <- gaussification(data$marker, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
   }
   else{
-    combined_marker <- gaussification(data, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
+    combined_markers <- gaussification(data, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
     
   }
-  browser()
   #print(get_gaussification_peaks(combined_marker))
   #peaks <- tibble(w = get_gaussification_peaks(combined_marker))
-  q <- combined_marker %>% ggplot(aes(x = t, y = val))
-  if(only_markers || !is.null(external_markers)){
+  q <- combined_markers %>% ggplot(aes(x = t, y = val))
+  if(only_markers || !is.null(external_markers) || !is.null(threshold)){
     with_markers <- T
   }
   if(!only_markers){
@@ -49,14 +50,15 @@ plot_gaussification <- function(data = boundaries_lab,
     }
   }
   else{
-    peaks <- tibble(w = get_gaussification_peaks(combined_marker))
+    peaks <- tibble(w = get_gaussification_peaks(combined_markers))
+    external_markers <- combined_markers
   }
   intercept <- 0
   #browser()
   if(!is.null(threshold)){
     #browser()
-    peaks <- get_gaussification_peaks(combined_marker)
-    peak_vals <- combined_marker %>% filter(t %in% peaks) %>% pull(val) 
+    peaks <- tibble(w = get_gaussification_peaks(combined_markers))
+    peak_vals <- combined_markers %>% filter(t %in% peaks$w) %>% pull(val) 
     if(threshold == "median"){
       intercept <- median(peak_vals)
     }
@@ -74,12 +76,24 @@ plot_gaussification <- function(data = boundaries_lab,
     }
     q <- q + geom_hline(yintercept = intercept)
   }
-  browser()
+  #browser()
   if(with_markers){
-    q <- q + geom_vline(data = combined_marker %>% 
-                          filter(val >= intercept, t %in% peaks, t >= start, t <= end), 
+    if("val" %in% names(external_markers)){
+      markers <- external_markers %>% 
+        filter(val >= intercept, t %in% peaks$w, t >= start, t <= end)
+    }
+    else{
+      markers <- external_markers %>% 
+        filter(time_in_s  %in% peaks$w, time_in_s  >= start, time_in_s  <= end) %>% mutate(t = time_in_s)
+      
+    }
+    if(is.null(alpha)){
+      alpha <- pmax(.01, pmin(1, .25*(end - start)/nrow(markers)))
+    }
+    q <- q + geom_vline(data = markers, 
                         aes(xintercept = t), 
-                        color = "lightblue4")
+                        color = "lightblue4", 
+                        alpha = alpha)
   }
   q <- q + theme_minimal() 
   q <- q + scale_color_brewer(palette = "RdBu") 
@@ -93,9 +107,11 @@ plot_marker_histogram <- function(data = boundaries_lab,
                                   external_markers = NULL, 
                                   start = 0, 
                                   end = 430){
+  
   q <- data %>% ggplot(aes(x = time_in_s, y = after_stat(count))) 
   q <- q + geom_histogram(binwidth = sigma, fill = "lightblue", color = "black")
-  
+  labels <- NULL
+  #browser()
   if(!is.null(external_markers)){
     if(is.data.frame(external_markers)){
       if("level" %in% names(external_markers)){
@@ -110,14 +126,25 @@ plot_marker_histogram <- function(data = boundaries_lab,
     }
     q <- q + geom_vline(data = peaks %>% filter(time_in_s >= start,
                                                 time_in_s <= end), 
-                        aes(xintercept = time_in_s, linetype = level, color = level), 
+                        aes(xintercept = time_in_s, 
+                            linetype = level, 
+                            color = level), 
                         linewidth = 1)
+    if("label" %in% names(external_markers)){
+      q <- q + ggrepel::geom_text_repel(data = external_markers %>% filter(time_in_s >= start, time_in_s <= end), 
+                          aes(x = time_in_s + (end - start)*.00, 
+                              y = 40, 
+                              color = factor(level),
+                              label = as.character(label)))
+    }
+    
   }
   q <- q + theme_minimal() 
   q <- q + scale_color_manual(values = c("indianred", "darkgreen", "coral")) 
   #q <- q + scale_color_brewer(palette = "RdBu", direction = -1) 
   q <- q + labs(x = "Time (s)", y = "Count")
   q <- q + xlim(start, end)
+  q <- q + theme(legend.position = "none")
   q  
 }
 
@@ -145,6 +172,7 @@ plot_dtw_alignment <- function(x, y = NULL){
                                       ends = "last", 
                                       type = "closed"))
   q <- q + theme_minimal()
+  q <- q + scale_color_brewer(palette = "Set1")
   q <- q + labs(x = "Time (s)", title = sprintf("DTW: dist = %.2f, norm = %.2f, d = %.2f, abs(d) = %.2f", 
                                                 d$distance, d$normalizedDistance, 
                                                 mean(plot_df2$d), mean(abs(plot_df2$d))))
@@ -224,4 +252,38 @@ plot_isi_dist <- function(data = all_boundaries, ground_truth = ground_truth ){
   q <- q + scale_fill_brewer(palette = "Set1") 
   q <- q + labs(x = "Log ISI")
   q
+}
+
+make_analytical_histograms <- function(sigma = 1, max_level = 1){
+  # Fig1a: Stimulus 1 komplett
+  tmp <- all_boundaries %>% filter(piece == 1)
+  gt <- ground_truth %>% filter(piece == 1, level <= max_level) %>% mutate(label = 1:nrow(.))
+  fig1a <- plot_marker_histogram(tmp, 
+                                 sigma = sigma, 
+                                 external_markers = gt,
+                                 start = 0,
+                                 end = piece_durations[1])
+  browser()
+  # Fig1b: Stimulus 1, 0-100 sec
+  fig1b <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt, start = 0, end = 100)
+  # Fig1c: Stimulus 1, 122-190 sec
+  fig1c <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt, start = 122, end = 199)
+  # Fig1d: Stimulus 1, 175-322 sec (end)
+  fig1d <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt, start = 175, end = piece_durations[1])
+  # 
+  # Fig2a: Stimulus 2 komplett
+  tmp <- all_boundaries %>% filter(piece == 2)
+  gt <- ground_truth %>% filter(piece == 2, level <= max_level) %>% mutate(label = 1:nrow(.))
+  fig2a <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt,  end = piece_durations[2])
+  # Fig2b: Stimulus 2, 0-210 sec
+  fig2b <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt,  start = 0, end = 210)
+  # Fig2c: Stimulus 2, 200-380 sec (end)
+  fig2c <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt,  start = 200, end = piece_durations[2])
+  ggsave(plot = fig1a, filename = "figs/fig1a.png", dpi = 300)
+  ggsave(plot = fig1b, filename = "figs/fig1b.png", dpi = 300)
+  ggsave(plot = fig1c, filename = "figs/fig1c.png", dpi = 300)
+  ggsave(plot = fig1d, filename = "figs/fig1d.png", dpi = 300)
+  ggsave(plot = fig2a, filename = "figs/fig2a.png", dpi = 300)
+  ggsave(plot = fig2b, filename = "figs/fig2b.png", dpi = 300)
+  ggsave(plot = fig2c, filename = "figs/fig2c.png", dpi = 300)
 }

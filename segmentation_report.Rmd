@@ -1,5 +1,7 @@
 ---
-title: "Form perception in classical music: Listeners ratings, mmusic theoretical predictions"
+title: "Form perception in classical music: Listeners ratings vs. music theoretical predictions"
+author: Klaus Frieler
+date: 23.08.2023
 output: word_document
 ---
 
@@ -8,25 +10,29 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE, warnings = 
 options(tidyverse.quite = T)
 library(tidyverse)
 library(flextable)
+library(ggpubr)
 source("analysis.R")
 source("workspace_analysis.R")
 source("plot_util.R")
 setup_workspace()
 piece_names <- c("Louise Farrenc, Nonet, 1st mov", "John K. Paine, Symphony No. 1, 1st mov")
+piece_names_short <- c("Louise Farrenc", "John K. Paine")
 #seg_stats_new3 <- get_segmentation_stats(ground_truth = ground_truth %>% filter(level < 3), band_widths = seq(0.5, 4, .25))
 
 ```
 
 # Method
-In an online and a lab experiment, participant were asked to mark sections or segments in two pieces of classical music, concurrently to hearing the piece. In the lab version, participants also were asked further questions on the nature of their segmentation mark. There were a total `r n_distinct(metadata$p_id)` participants (`r as.numeric(table(metadata$gender)["female"])` female), with `r n_distinct(metadata[metadata$source == "lab",]$p_id)` in the lab version and `r n_distinct(metadata[metadata$source == "online",]$p_id)` in the online version. Mean age was `r round(mean(metadata$age, na.rm = T), 1)` (SD = `r round(sd(metadata$age, na.rm = T),1)`). Mean GoldMSI was `r round(mean(metadata$GMS.general, na.rm = T), 1)` (SD = `r round(sd(metadata$GMS.general, na.rm = T), 1)`).
+In an online and a lab experiment, participant were asked to mark beginning or endings  in two pieces of classical music while listening to the piece. These markers delineate sections or segments, and a set of markers is called a *segmentation* of the musical piece. In the lab version, participants  were asked further questions on the nature of their segmentation marks, which are not considered here. 
 
-We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  participants from the online version due to missing data (no markers were given).
+There were a total of `r n_distinct(metadata$p_id)` participants (`r as.numeric(table(metadata$gender)["female"])` female), with `r n_distinct(metadata[metadata$source == "lab",]$p_id)` in the lab experiment.  and `r n_distinct(metadata[metadata$source == "online",]$p_id)` in the online version. Mean age was `r round(mean(metadata$age, na.rm = T), 1)` (SD = `r round(sd(metadata$age, na.rm = T),1)`). Mean GoldMSI values was `r round(mean(metadata$GMS.general, na.rm = T), 1)` (SD = `r round(sd(metadata$GMS.general, na.rm = T), 1)`), which is about the German averages (Schaal et al.)
+
+We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  participants from the online version due to missing data (e.g., no segments were marked).
 
 
 ## Analysis
-##General observations
+### General observations
 
-Our main data are time positions, measured in seconds from the start of a piece. In the lab experiment, the participants completed two trials for each piece, whereas in the online version, they completed only one. Additionally, we analyzed the pieces with respect to endings and beginnings based on music theory, using two different levels of granularity.
+Our main data are time positions, measured in seconds from the start of a piece. In the lab experiment, the participants completed two trials for each piece, whereas in the online version, there was only one trial. Additionally, we analyzed the pieces with respect to endings and beginnings based on music theory, using two different levels of granularity.
 
 ```{r piece_stats, }
 get_boundary_stats() %>% 
@@ -37,7 +43,7 @@ get_boundary_stats() %>%
             sd_isi =  round(mean(s, na.rm =T), 1),
             .groups = "drop") %>% 
   arrange(piece, source, trial) %>%
-  mutate(piece = piece_names[piece] %>% remove_doublets(), 
+  mutate(piece = piece_names_short[piece] %>% remove_doublets(), 
          source = remove_doublets(source) 
          #level = remove_doublets(level),
          #trial = remove_doublets(trial)
@@ -47,8 +53,8 @@ get_boundary_stats() %>%
                                   source = "Source", 
                                   trial = "Trial", 
                                   level = "Level", 
-                                  n_p = "No. participants", 
-                                  n = "No of time markers",
+                                  n_p = "No. Part.", 
+                                  n = "No. Markers",
                                   mean_isi = "Mean ISI (s)",
                                   sd_isi = "SD ISI (s)")) %>% 
   set_caption("Tab. 1. Overview of time marker data.") %>% 
@@ -57,17 +63,17 @@ get_boundary_stats() %>%
   autofit()
 ```
 
-Notable, the level 2 segments from the music theoretial analysis have much smaller ISI (intersegment interval) than all other data. The distribution of ISI can be found in Fig. 1. Here, we used the logarithm of ISI, to make the distribution more close to a normal distribution. This means that the ISIs seems to follow roughly a log-normal distribution. The same holds true for the theoretical segments.
+Notably, the level 2 segments from the music theoretical analysis have much smaller ISIs (intersegment interval) than all other subsets. The distribution of ISIs can be found in Fig. 1, where we used the logarithm of ISI, to make the distribution more close to a normal distribution, as the ISIs follow roughly a log-normal distribution. This also holds true for the theoretical segment, which is an interesting fact in itself.
 
 
-```{r isi_dist, fig.cap = "Figure 1. Distribitution of intersegment intervals.", fig.width = 12, fig.height = 8, include = T}
+```{r isi_dist, fig.cap = "Figure 1. Distribitution of intersegment intervals.", fig.width = 12, fig.height = 8, include = F}
 plot_isi_dist() + labs(subtitle = "Dotted lines are theory means")
 
 ```
 
-Fig. 1 suggest that in the lab condition, the mean log ISIS might be bimodal. However, fitting a Gaussian mixture model using the ``Mclist`` pacakge did not corroborate this.
+Fig. 1 further suggest that in the lab condition, the mean log ISIS might be bi-modally distributed. However, fitting a Gaussian mixture model using the ``Mclust`` package and automatic cluster number selection did not corroborate this.
 
-We also checked whether the participant mean log ISIs were also different between pieces and trials using a linear mixed model with random effects for participants and an interaction of piece and trial and of piece and source. The results can be seen in Tab. 2. Indeed, the mean log ISI are different between pieces and trials. Indeed, all coefficients are significant. The second piece had generally longer ISIs ans the first piece, and second trials as well, though the increase is a bit smaller for the second piece. There was significant difference that in the online experiment the participants had slightly smaller ISIs for the first piece (`r piece_names[1]`). 
+We checked whether the participant log ISIs are different between pieces and trials by using a linear mixed model with  participants as random effects and interactions of piece and trial and of piece and source as fixed effects. The results can be seen in Tab. 2. Indeed, all coefficients became significant. The second piece had generally longer ISIs than the first piece. Similarly, second trials had longer ISIs as well, though the increase is a bit smaller for the second piece here. Finally, in the online experiment the participants had slightly but significantly smaller ISIs for the first piece (`r piece_names[1]`). 
 
 ```{r lm_piece_trial}
 mod <- all_boundaries %>% 
@@ -85,31 +91,96 @@ mod %>% broom.mixed::tidy() %>%
   set_caption("Tab. 2. Linear mixed model of log ISI for piece and trial")
 ```
 
-## Interrater agreement and agreement with theory
-As the music theoretical predictions of segment border can be treated as "just another rater", the techniques applied for interrater agreement and agreement with theory are basically the same. The general problem here is the very fine grained resolution of 1 ms. Reaction times for humans are in the order of 500 ms, whereas intersegment intervals are in the order of several 10 seconds. This necessitates some form of binning or other bandwidth-based techniques, which introduces a free parameter a bin size or bandwidth, when comparing one of more segmentations. An alternative, parameter free techniques is dynamic time warping, which creates and aligment between to series of time points. However, for aggregating all participants segmenations in a single "collective" or average segmenation, a bandwidth parameter is still needed.
+### Interrater agreement and agreement with theory
+A general problem here is the very fine grained resolution of 1 ms of the empirical markers. Reaction times of humans are typically in the order of 500 ms, whereas intersegment intervals (ISI) are in the order of several 10 seconds. This lends itself to use some form of binning or other bandwidth-based technique when comparing one of more segmentations. This introduces a principally free parameter (bin size or bandwidth(), for which not a priori value can be given, though it should be in the range of 1 second. 
 
-Another problem is that segmentations are generally sparse in nature, typically in the order of  10 segments (mean number of segments = `r all_boundaries %>% group_by(p_id, piece, trial, source) %>% summarise(n = n(), .groups = "drop") %>% summarise(m_n = mean(n)) %>% pull(m_n)`) over a set of several 100.000  possible  points (given a millisecond resolution), Even after binning with a bandwidth of several seconds, this is still a problem. So, any metrics that counts true negatives is not well-suited as it will over estimated the agreement considerably. Another problem is to establish a suitable baseline to check whether the agreement is significantly different from a random segmentation.
+An alternative, parameter-free technique is dynamic time warping, which creates an (optimal) alignment between two series of time points. However, for aggregating all participants segmentations in a single "collective" or average segmentation, a bandwidth parameter is still needed.
+
+Another issue is that segmentations are generally sparse in nature, typically in the order of 10 segments (mean number of segments = `r round(all_boundaries %>% group_by(p_id, piece, trial, source) %>% summarise(n = n(), .groups = "drop") %>% summarise(m_n = mean(n)) %>% pull(m_n), 1)`) over a set of several 100.000  possible  points (based on a millisecond resolution), Even after binning with a bandwidth of several seconds, this is still a problem. Hence, any metrics that counts true negatives is not well-suited as it will over-estimate the agreement considerably. A further problem is to establish a suitable baseline to check whether the agreement is significantly different from random segmentations.
 
 ### Gaussification
-One method to move from a distribution of time points to a aggregated function is called Gaussification, which is a weighted sum of of Gaussians with the time points means and a free bandwidth parameter as standard deviations. If the weights are all equal then this is equivalent to a Gaussian kernel density estimation (up to normalization).
+One method to aggregate distinct sets of time points is called "Gaussification" (Frieler, 2004), which is simply a weighted sum of of Gaussians with the time points as means and a free bandwidth parameter as standard deviations. If the weights are all equal this is equivalent to a Gaussian kernel density estimation (up to constant factor). In Fig. 2, two gaussifications with bandwidth 2 s overlaid with all segmentation marks are depicted. The density of the segmentations marks correspond with the peaks of gaussification.
 
-Such a Gaussification (or probability density) then allows to create an aggregate segmentation by picking peaks (maxima). Another free parameter, a threshold can be used to filter the peaks further, e.g., keeping only the peaks with heights over the mean or the median of all peak heights or a fixed threshold. The is no one-to-one translation of peal height to number of participants, but approximately it can be said that the peak height is the averaged number of participants having a segmentation mark in a vicinity (with bandwith) of the peak. If *N*  participants would have completely identical sets of segmentation marks, then this statement is exactly true, as one would add *N* (unnormalized) Gaussians over the same mean value in this case. The peak positions can also be approximately regarded as the mean position of segmentation markers in the vicinity of the peak, where the extension of the vicinity is determined by the bandwidth parameter. For a single segmentation the peaks of a Gaussification are obviously the segmentation marks themselves.
+```{r gaussifications, fig.cap = "Figure 2. Gaussification (red line) and segmentation marks (blue-gray lines) for piece 1 (top) and piece 2 (bottom).", fig.width = 12, fig.height = 12, include = T}
+p <- plot_gaussification(all_boundaries %>% filter(piece == 1), 
+                         end = piece_durations[1], 
+                         external_markers = all_boundaries %>% filter(piece == 1)) + labs(title = piece_names[1])
+q <- plot_gaussification(all_boundaries %>% filter(piece == 2), 
+                         end = piece_durations[2], 
+                         external_markers = all_boundaries %>% filter(piece == 2)) + labs(title = piece_names[2])
+ggarrange(p,q, ncol = 1)
+```
+
+A gaussification (or- probability density) allows to define aggregate segmentations by its peaks (maxima). Here, a threshold, another free parameter,  can be used to filter the peaks further, e.g., by keeping only the peaks with heights larger the mean or the median of all peak heights. This allows to keep only points of largest agreement. 
+
+Peak heights is corresponds approximately to the number of participants' marks contributing to this peak.  If *N*  participants would have completely identical sets of segmentation marks, then this statement is exactly true, as one would add *N* (unnormalized) Gaussians over the same mean value in this case. The peak positions can also be regarded as the local mean position of segmentation markers. For a single set of segmentation marks, the peaks of its gaussification reproduce obviously the segmentation marks themselves.
 
 ### Dynamic Time Warping
-Dynamic time warping is a very power dynamic programming method to align to sets of points in a minimal depending on a cost function. The distances between align points can then be used as an indicator of similarity of the sets of time points. We used the ``dtw`` package for R, which returns a normalized distance value which we used for comparison. This value is depending on absolute offsets and time shifts, but we have here time points only between the start (0) and the end of the pieces (322 vs. 421 s), so this is not an issue.
+Dynamic time warping is a very powerful method to align two sets of points in a optimal (i.e. minimal) way based on a cost function. The distances between the aligned points can then be used as an indicator of similarity of the sets of time points. We used the ``dtw`` package for R, which returns a normalized distance value which we used for comparison. This value is depending on absolute offsets and time shifts, but all time points are fixed between the start (0) and the end of the pieces (322 vs. 421 s), so this is not an issue.
+
+```{r dtw_example, fig.cap = "Figure 3. Sample DTW alignment between a participant (query, red dots) and the level 1 ground truth segments (reference, blue dots) for piece 1. Arrows indicate the mapping of points, the distance is the sum of horizontal shifts by this arrows.", fig.width = 12, fig.height = 8, include = T}
+
+plot_dtw_alignment(all_boundaries %>% 
+                     filter(p_id == p_id[1], piece == 1, trial == 1) %>% 
+                     pull(time_in_s), 
+                   ground_truth %>% 
+                     filter(piece == 1, level == 1) %>% 
+                     pull(time_in_s)) + theme(axis.text.y = element_text(size = 12), legend.position = "none")
+```
 
 ### F1 scores
-F1 scores is defined as the harmonic mean of specificity and sensitivity for two binary sequences. It can expressed as the ratio of true positives to the sum of true positives and the arithmetic mean of false positives and false negatives.For two binary sequences, i.e., sequences consisting only of 0's (representing absence of something) and 1's (representing the presence of something), then a true positive is a spot in the two sequences, when to 1's coincide. A false positive is when a 0 in one string matches a 1 in the other sequence, the same for a false negative but with sequences reversed. As the F1 scores is symmetric with regard to the sequences, it does not matter which sequences is regarded as the ground truth and which as the "query". 
+The F1 score is defined as the harmonic mean of specificity (to find only correct instances) and sensitivity (to find all correct instances)  of  information retrieval system. This can be translated into a measure of similarity of two binary sequences, where 1 indicate positive instance (the presence of something) and 0 indicate negative instances (the absence of something). 
 
-To use F1-scores as similarity measure for segmentations, the underlying time span need to identical and identically  binned into N bins of duration t_N. The bins needs can be overlapping or disjunct. For each bin a 1 is recorded if a segmentation mark is inside its boundary, or a 0 else. 
+If one has two binary sequences, one called the query and the other the reference, then it can expressed as the ratio of true positives to the sum of true positives and the arithmetic mean of false positives and false negatives. A true positive is a location where two 1's coincide. A false positive is a location where a one the query matches a zero in the reference. A false negative is a location where a zero in the query matches a one in the reference. (A true negative is a location where two zeros match, but this is not considered in the F1 score). As false positives and false negatives are counted for in the same fashion, they are interchangeable and thus the role of query and reference can be exchanged without altering the F1 score. Thus, only location where at least one one is present is counted for the F1 scores, one could add as many matching zero pairs as one wants without changing the F1 score. 
+
+To use F1-scores as similarity measure for a pair of segmentations, the underlying time span needs to be identical and and  segmented into identical bins, i.e. time segments that cover the full range . The bins  can be overlapping or disjoint, but they have to match. For each bin, a one is recorded if at least one segmentation mark is inside its boundary, or a zero, otherwise. 
 
 #### Example: F1 scores
-One segmentation over the time span of 60 s has time points 10, 20, 30, 40, 50, whereas another one has 15, 25, 35, 45, 55. Covering the time span with 3 disjoint bins of 20 sec each (including the left and excluding the right boundary), translates the first segmentation into ``1, 1, 1`` and the second into ``0, 1, 1``. The number of true positives is 2, the number of false positives (or false negatives) is 1. This results in a F1 score of 
-``F1 = 2/(2 + .5*(1 + 0)) = 2/2.5 = .8)``. If we would have use a 5 sec bins, the first sequence would be have been translated to ``0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0`` an the second to ``0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1``, a complete different scenario, as there are no true positives now, so the F1 scores here would be 0. This illustrates quite clearly the influence of the bin size and problem of bin boundaries. In order to stabilize values, we will (logically) add two binary sequences resulting from the same binning but with half a bin size of overlap. This is equivalent to smearing out the bins in time.
+One segmentation over the time span of 60 s has time points 10, 20, 30, 40, 50, whereas another one has 15, 25, 35, 45, 55. Covering the time span with three disjoint (non-overlapping) bins of 20 sec each (including the left and excluding the right boundary), translates the first segmentation into ``1, 1, 1`` and the second into ``0, 1, 1``. The number of true positives is two, the number of false positives (or false negatives) is one. This results in a F1 score of 
+``F1 = 2/(2 + .5 * (1 + 0)) = 2/2.5 = .8)``. 
+
+If we would have used  non-overlapping bins of five second duration, the first sequence would be have been translated to ``0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0`` an the second to ``0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1``. This a complete different scenario, as there are no true positives now, so the F1 scores here would be zero. 
+This illustrates quite clearly the influence of bin size and whether the bins are overlapping or not. In order to stabilize F1 score, we will (logically) add two binary sequences resulting from the same binning but with half a bin of overlap. This allows to be
 
 
-###Interrater Agreement
-The heights of the peaks vs. the height of the troughs of a Gaussification of set of segmentations can be regarded as a measure of interrater agreement. If there is substantial agreement, segmentations are close to each other resulting in higher peaks and lower troughs. Numerically this can be expressed as the standard deviations of all peak heights.
+### Interrater Agreement
+The heights of the peaks vs. the height of the troughs of a Gaussification of set of segmentations can be regarded as a measure of inter-rater agreement. If there is substantial agreement, segmentation marks from different raters are close to each other resulting in higher peaks and lower troughs. If there is complete agreement (with a suitable small bandwidth) between *N* raters, there will be peaks of height *N* and troughs with zero height. Based on this, we can define an inter-rater agreement metric as the difference between mean peak and mean trough height, divided by the number of raters. This yields a number between zero and one, where one means perfect agreement. However, as the heights of the peaks and the troughs are correlated by definition of the gaussification, we can also use a simpler measure but dividing the mean peak height by the number of raters.
 
+## Hypothesis testing
+In order to calibrate our scores of inter-rater agreement and agreement with theory, we need to find a baseline as there are no standard hypothesis tests that cover our very specific measures. To this end, we use simulations to compare the real agreements with agreements of random segmentations. Simulation are either based on the ground truth data or the participants' segmentations. For this, we use the observation (see above) that the inter-segmentation intervals follow roughly a log-normal distribution. This can be used to sample a set of log ISIs from a a normal distribution and converting them into to a segmentation by cumulative summing the exponentiated intervals, starting, but not including zero (as zero is the trivial segment border). Having these simulations, we can check whether the real metrics is significantly different from pure chance values. 
+
+
+# Results
+## Inter-rater agreement
+We employed the full method for inter-rater agreement (based on peaks and troughs) for the two pieces, for both  trials separately. We compared the values to 50 simulation each, based on the participants' segmentations of the corresponding case. We were using just a single bandwidth of ``2 s`` due to the long calculation need for the simulations (and quick experimentation showed that the parameter seems to have little influence on the results).
+
+Results can be found in Tab. 3. The agreement values range between .12 and .17, and are thus not very strong, which is not unexpected giving the enormous number of degrees of freedom, but are clearly significantly different from random agreement which ranges from .025 to .041 in the simulations. Further observations are that the second piece has slightly larger agreement than the second piece and that agreement in the second trials is larger than in the first trials. 
+
+```{r interrater_agreements}
+readRDS("data/peakiness_irr_s2.rds") %>% 
+  select(Piece = piece, Trial = trial,`N Raters`= n_rater, `Agreement Raters` = mu,  `Mean Agreement (Simulations)` = estimate,  `t` = statistic, `p` = p.value) %>% 
+  mutate(across(where(is.numeric), function(.x) round(.x, 3) )) %>%
+  flextable() %>% 
+  fontsize(i = NULL, j = NULL, size = 10, part = "all") %>% 
+  autofit() %>% 
+  set_caption("Tab. 3. Interrater agreement of trials (lab and online) vs. random agreement by simulation of N = 50 runs with sigmas of 2 s")
+```
+
+## Agreement with theory
+We used  normalized DTW distance and F1 scores as metrics to compare participants' segmentations with theoretical predictions. We compared two levels of theoretical granularity over a range of bandwidth values from *.5 s* to *4 s* in steps of *100 ms*. For each bandwidth and theoretical level, we first aggregated the participants' rating using gaussification and a subsequent downsampling by selecting  all peaks with values exceeding the mean of all peaks. This yields a summary segmentation for which F1 scores and normalized DTW distance (as described above) with the theoretical predictions can be determined. Additionally, we calculated the same values for  *N = 25*  random  segmentations based on the summary segmentation and the bandwidth. The results can be found in Fig. 4a and 4b.
+
+
+```{r band_with_f1, fig.cap = "Figure 4a. F1 scores of summary (red) and random (blue) segmentation agains theoretical predictions over band width for pieces and granularity levels of theory. ", fig.width = 12, fig.height = 8, include = T}
+plot_bandwidth(seg_stats, type = "F1")
+
+```
+
+
+```{r band_with_nd, fig.cap = "Figure 4b. DTW normalized of summary (red) and random (blue) segmentation against theoretical predictions over band width for pieces and granularity levels of theory.", fig.width = 12, fig.height = 8, include = T}
+plot_bandwidth(seg_stats, type = "normalized distance")
+
+```
+
+It is clear, that the agreement of the theoretical prediction with the summary segmentation is significantly better for most parts of the bandwidth range for both metrics (note that for normalized distance larger values mean lower agreement), for both pieces and the coarsest granularity level (level 1), and for F1 sores also for level 2. Evidently, the agreement increases with larger bandwidth, as this means a more generous clustering of time points. Single exception is the normalized DTW distance for level 2. Here, random segmentation and summary segmentation are generally quite close together, particularly, for level 2 of piece 1. 
 
 
