@@ -6,7 +6,7 @@ output: word_document
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE, warnings = FALSE, message = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE, warning = FALSE, message = FALSE)
 options(tidyverse.quite = T)
 library(tidyverse)
 library(flextable)
@@ -34,7 +34,7 @@ We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  partic
 
 Our main data are time positions, measured in seconds from the start of a piece. In the lab experiment, the participants completed two trials for each piece, whereas in the online version, there was only one trial. Additionally, we analyzed the pieces with respect to endings and beginnings based on music theory, using two different levels of granularity.
 
-```{r piece_stats, }
+```{r piece_stats}
 get_boundary_stats() %>% 
   group_by(piece, source, trial, level) %>% 
   summarise(n_p = n_distinct(p_id), 
@@ -66,7 +66,7 @@ get_boundary_stats() %>%
 Notably, the level 2 segments from the music theoretical analysis have much smaller ISIs (intersegment interval) than all other subsets. The distribution of ISIs can be found in Fig. 1, where we used the logarithm of ISI, to make the distribution more close to a normal distribution, as the ISIs follow roughly a log-normal distribution. This also holds true for the theoretical segment, which is an interesting fact in itself.
 
 
-```{r isi_dist, fig.cap = "Figure 1. Distribitution of intersegment intervals.", fig.width = 12, fig.height = 8, include = F}
+```{r isi_dist, fig.cap = "Figure 1. Distribitution of intersegment intervals.", fig.width = 12, fig.height = 8, include = T, warning = F}
 plot_isi_dist() + labs(subtitle = "Dotted lines are theory means")
 
 ```

@@ -105,6 +105,7 @@ plot_gaussification <- function(data = boundaries_lab,
 plot_marker_histogram <- function(data = boundaries_lab, 
                                   sigma = 2, 
                                   external_markers = NULL, 
+                                  lw = 1,
                                   start = 0, 
                                   end = 430){
   
@@ -129,7 +130,7 @@ plot_marker_histogram <- function(data = boundaries_lab,
                         aes(xintercept = time_in_s, 
                             linetype = level, 
                             color = level), 
-                        linewidth = 1)
+                        linewidth = lw)
     if("label" %in% names(external_markers)){
       q <- q + ggrepel::geom_text_repel(data = external_markers %>% filter(time_in_s >= start, time_in_s <= end), 
                           aes(x = time_in_s + (end - start)*.00, 
@@ -254,31 +255,40 @@ plot_isi_dist <- function(data = all_boundaries, ground_truth = ground_truth ){
   q
 }
 
-make_analytical_histograms <- function(sigma = 1, max_level = 1){
+make_analytical_histograms <- function(sigma = 1, max_level = 1, lw = 1){
   # Fig1a: Stimulus 1 komplett
   tmp <- all_boundaries %>% filter(piece == 1)
-  gt <- ground_truth %>% filter(piece == 1, level <= max_level) %>% mutate(label = 1:nrow(.))
+  gt <- ground_truth %>% 
+    filter(piece == 1, level <= max_level) %>% 
+    group_by(level) %>% 
+    mutate(label = sprintf("%s.%s", level, 1:n())) %>% 
+    ungroup()
   fig1a <- plot_marker_histogram(tmp, 
-                                 sigma = sigma, 
+                                 sigma = 2 * sigma, 
                                  external_markers = gt,
+                                 lw = lw,
                                  start = 0,
                                  end = piece_durations[1])
   browser()
   # Fig1b: Stimulus 1, 0-100 sec
-  fig1b <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt, start = 0, end = 100)
+  fig1b <- plot_marker_histogram(tmp, sigma = sigma, lw = lw, external_markers = gt, start = 0, end = 130)
   # Fig1c: Stimulus 1, 122-190 sec
-  fig1c <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt, start = 122, end = 199)
+  fig1c <- plot_marker_histogram(tmp, sigma = sigma, lw = lw, external_markers = gt, start = 122, end = 199)
   # Fig1d: Stimulus 1, 175-322 sec (end)
-  fig1d <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt, start = 175, end = piece_durations[1])
+  fig1d <- plot_marker_histogram(tmp, sigma = sigma, lw = lw, external_markers = gt, start = 175, end = piece_durations[1])
   # 
   # Fig2a: Stimulus 2 komplett
   tmp <- all_boundaries %>% filter(piece == 2)
-  gt <- ground_truth %>% filter(piece == 2, level <= max_level) %>% mutate(label = 1:nrow(.))
-  fig2a <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt,  end = piece_durations[2])
+  gt <- ground_truth %>% filter(piece == 2, level <= max_level) %>% 
+    group_by(level) %>% 
+    mutate(label = sprintf("%s.%s", level, 1:n())) %>% 
+    ungroup()
+  
+  fig2a <- plot_marker_histogram(tmp, sigma = 2 * sigma, lw = lw, external_markers = gt,  end = piece_durations[2])
   # Fig2b: Stimulus 2, 0-210 sec
-  fig2b <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt,  start = 0, end = 210)
+  fig2b <- plot_marker_histogram(tmp, sigma = sigma, lw = lw, external_markers = gt,  start = 0, end = 210)
   # Fig2c: Stimulus 2, 200-380 sec (end)
-  fig2c <- plot_marker_histogram(tmp, sigma = sigma, external_markers = gt,  start = 200, end = piece_durations[2])
+  fig2c <- plot_marker_histogram(tmp, sigma = sigma, lw = lw, external_markers = gt,  start = 200, end = piece_durations[2])
   ggsave(plot = fig1a, filename = "figs/fig1a.png", dpi = 300)
   ggsave(plot = fig1b, filename = "figs/fig1b.png", dpi = 300)
   ggsave(plot = fig1c, filename = "figs/fig1c.png", dpi = 300)
