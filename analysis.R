@@ -345,6 +345,45 @@ get_gaussification_sd <- function(onsets, sigma = 1, deltaT = .1, start = 0, end
   g %>% filter(t %in% peaks) %>% pull(val) %>% sd(na.rm = T) 
 }
 
+export_gaussification_peaks <- function(boundaries, piece = 1, source = NULL, 
+                                        sigma = 2, deltaT = .1, start = 0, end = 300){
+  onsets <- boundaries %>% filter(piece == !!piece)
+  if(!is.null(source)){
+    onsets <- onsets %>% filter(source %in% !!source)
+  }
+  g <- gaussification(onsets$time_in_s, 
+                      sigma = sigma, 
+                      deltaT = deltaT, end = piece_durations[piece], 
+                      use_rect_func = FALSE)
+  peaks <- get_gaussification_peaks(g, output = "time_values")
+  peaks
+}
+
+export_all_gaussification_peaks <- function(data = all_boundaries, sigma = 2, fname = "gauss_peaks.xlsx"){
+  N_1 <- data %>% distinct(piece, trial, source, p_id)  %>% filter(piece == 1) %>% nrow()
+  N_2 <- data %>% distinct(piece, trial, source, p_id)  %>% filter(piece == 2) %>% nrow()
+  gauss_peaks <- bind_rows(export_gaussification_peaks(all_boundaries) %>% 
+                             mutate(piece = piece_names[1],
+                                    N = N_1), 
+                           export_gaussification_peaks(all_boundaries, piece = 2) %>% 
+                             mutate(piece = piece_names[2],
+                                    N = N_2)) 
+  #browser()
+  gauss_peaks <- gauss_peaks %>% 
+    rename(peak_height = val) %>% 
+    group_by(piece) %>% 
+    mutate(rel_peak_height = peak_height/N,
+           mean_peak_height = mean(peak_height), 
+           median_peak_height = median(peak_height), 
+           q75 = quantile(peak_height)[4],
+           max = max(peak_height)) %>% 
+    ungroup()
+  if(!is.null(fname) && nchar(fname) > 0 ){
+    writexl::write_xlsx(gauss_peaks, fname)
+  }
+  gauss_peaks
+}
+
 get_gaussification_peakiness <- function(onsets, n_rater = 1, sigma = 1, deltaT = .1, start = 0, end = 300){
   #browser()
   g <- gaussification(onsets, sigma = sigma, deltaT = deltaT, end = end, use_rect_func = FALSE)
@@ -742,4 +781,31 @@ test_peakiness_values <- function(seg_data = all_boundaries, size = 100, sigma =
       })
    })
   })
+}
+
+find_annotated_peaks <- function(data = all_boundaries, annotations = boundaries_lab_annotations, window_size = 2, summary = T){
+  all_peaks <- export_all_gaussification_peaks(data, fname = NULL)
+    
+  lab2 <- annotations %>% select(p_id, time_in_s, piece, starts_with("SEG"))
+  ret <- 
+    map_dfr(1:2, function(p){
+    peak_positions <- all_peaks %>% filter(piece == piece_names[p]) 
+    map2_dfr(peak_positions$t, peak_positions$rel_peak_height, function(t, val){
+      #browser()
+      lab2 %>% 
+        filter(piece == p, abs(time_in_s - t) < window_size) %>% 
+        mutate(peak_pos = t, 
+               rel_peak_height = val)
+    })
+  }) %>% na.omit()
+  
+  if(summary){
+    ret <- ret %>% 
+      group_by(piece, peak_pos) %>% 
+      summarise(beginning = mean(SEG.beginning, na.rm = T), 
+                ending = mean(SEG.ending, na.rm = T), 
+                importance = mean(SEG.importance), 
+                rel_peak_height = mean(rel_peak_height), .groups = "drop") 
+  }
+  ret
 }

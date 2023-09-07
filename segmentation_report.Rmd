@@ -104,10 +104,12 @@ One method to aggregate distinct sets of time points is called "Gaussification" 
 ```{r gaussifications, fig.cap = "Figure 2. Gaussification (red line) and segmentation marks (blue-gray lines) for piece 1 (top) and piece 2 (bottom).", fig.width = 12, fig.height = 12, include = T}
 p <- plot_gaussification(all_boundaries %>% filter(piece == 1), 
                          end = piece_durations[1], 
-                         external_markers = all_boundaries %>% filter(piece == 1)) + labs(title = piece_names[1])
+                         external_markers = all_boundaries %>% filter(piece == 1),
+                         segment_data = ground_truth %>% filter(piece == 1, level <= 2, theory == 1)) + labs(title = piece_names[1])
 q <- plot_gaussification(all_boundaries %>% filter(piece == 2), 
                          end = piece_durations[2], 
-                         external_markers = all_boundaries %>% filter(piece == 2)) + labs(title = piece_names[2])
+                         external_markers = all_boundaries %>% filter(piece == 2),
+                         segment_data = ground_truth %>% filter(piece == 2, level <= 2, theory == 1)) + labs(title = piece_names[2])
 ggarrange(p,q, ncol = 1)
 ```
 
@@ -182,5 +184,46 @@ plot_bandwidth(seg_stats, type = "normalized distance")
 ```
 
 It is clear, that the agreement of the theoretical prediction with the summary segmentation is significantly better for most parts of the bandwidth range for both metrics (note that for normalized distance larger values mean lower agreement), for both pieces and the coarsest granularity level (level 1), and for F1 sores also for level 2. Evidently, the agreement increases with larger bandwidth, as this means a more generous clustering of time points. Single exception is the normalized DTW distance for level 2. Here, random segmentation and summary segmentation are generally quite close together, particularly, for level 2 of piece 1. 
+
+
+## Subjective ratings of segment types
+In the second trial of the lab version of the experiment, we asked participants to judge at each selected segment position as to what extent (on a scale 1 to 6) they felt that this segment marked a (1) new beginning or (2) an ending. Additionally, we asked them (3) to rate the importance of this boundary.
+
+For analysis, we gathered the gausification peaks with a 2 s bandwidth and selected all boundary marker by participants that could be found in a 2 s window around the peak position. Next, we aggregated all importance, beginning, and ending ratings for each peak as well as the relative peak height (peak height divided by number of raters). 
+
+```{r importance_correlation, fig.cap = "Figure 5. Correlations and distribution over aggregated importance values and relative peak height.", fig.width = 12, fig.height = 8}
+annotated_peaks_sum <- find_annotated_peaks(all_boundaries, boundaries_lab_annotations, summary = T)
+#annotated_peaks_sum %>% select(rel_peak_height, beginning, ending, importance) %>% correlation::correlation()
+# pp_all <- 
+#   annotated_peaks_sum %>%  
+#   select("Beginning" = beginning, "Ending" = ending, "Importance" = importance, 
+#          `Rel. Peak Height`= rel_peak_height) %>%  
+#   GGally::ggpairs() + theme_bw() + scale_color_manual(values = "lightblue4")
+bind_rows(
+  correlation::correlation(annotated_peaks_sum %>%
+                             select(-c(piece, peak_pos))) %>%
+                             as_tibble() %>%
+                             mutate(piece = "both"),
+  correlation::correlation(annotated_peaks_sum %>%
+                             filter(piece == 1) %>%
+                             select(-c(piece, peak_pos))) %>%
+                             as_tibble() %>%
+                             mutate(piece = "1"),
+  correlation::correlation(annotated_peaks_sum %>% filter(piece == 2) %>%
+                             select(-c(piece, peak_pos))) %>%
+                             as_tibble()%>%
+                             mutate(piece = "2")) %>%
+  select(piece, x = Parameter1, y = Parameter2, r, p, N = n_Obs) %>%
+  mutate(across(where(is.numeric), function(x) round(x,3))) %>% arrange(x,y) -> cor_mat
+
+cor_mat %>%
+ filter(p < .05) %>%
+ flextable() %>%
+ autofit() %>%
+ set_caption("Tab. 4. Significant correlation of rater's boundary assessments for both pieces and either piece alone.")
+```
+We correlated the three assessments with each other and also with the relative peak height, for both pieces together and for each piece alone. Results can be found in Tab. 4, where for simplictiy only the significant correlations are shown.
+
+One see, that the assessment whether something ends or something new begins is in all cases strongly correlated (r about .6, .7). This is not too surprising as this is the definition of a segment. Nonetheless, this was aiming whether the participants were triggered to mark a segment boundary here by a clearly perceived ending or beginning, but it seems this is not easy to do. Perceived importance of a segment correlates with perceived beginning and endings alike, but, interestingly, only for the second piece, which drives the correlation for the combined set. On the other hand, relative peak height, i.e., interrater agreement on segment boundaries only correlates for the first piece. This all indicates that composition specific features are important alike.   
 
 

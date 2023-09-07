@@ -1,4 +1,5 @@
 library(tidyverse)
+library(janitor)
 
 piece_durations <- c(322, 421)
 
@@ -13,6 +14,80 @@ read_new_ground_truth <- function(){
     select(-c(beginning, ending, both))
   gt
 }
+
+segment_questions <- c("• Wie wichtig finden Sie diesen Abschnitt?" = "SEG.importance",
+                       "• Wie stark ist Ihr Gefühl, dass hier etwas endet?" = "SEG.ending",
+                       "• Wie stark ist Ihr Gefühl, dass hier etwas neues kommt?" = "SEG.beginning")
+task_questions <- c("• Das Stück hat mir gefallen." = "liking",
+                    "• Die Aufgabe war schwierig."  = "difficulty")
+
+BMRI_questions <- 
+  c("Wenn ich mit jemandem gemeinsam Musik höre, spüre ich eine besondere Verbindung zu dieser Person." = "BMR.q1",
+    "In meiner Freizeit höre ich kaum Musik." = "BMR.q2",
+    "Ich höre gerne Musik, die Emotionen enthält." = "BMR.q3",
+    "Musik leistet mir Gesellschaft, wenn ich alleine bin." = "BMR.q4",
+    "Ich tanze nicht gerne, auch nicht zu Musik, die ich sonst gerne höre." = "BMR.q5",                           
+    "Durch Musik fühle ich mich anderen Menschen verbunden." = "BMR.q6",                
+    "Ich informiere mich über Musik, die ich mag." = "BMR.q7",                               
+    "Ich werde emotional, wenn ich bestimmte Stücke höre." = "BMR.q8", 
+    "Musik beruhigt und entspannt mich." = "BMR.q9",                   
+    "Musik verleitet mich oft zum Tanzen." = "BMR.q10",
+    "Ich suche immer nach neuer Musik." = "BMR.q11",
+    "Mir kommen die Tränen oder ich weine, wenn ich eine Melodie höre, die ich sehr mag." = "BMR.q12",
+    "Ich singe oder musiziere gerne mit anderen Menschen." = "BMR.q13",
+    "Musik hilft mir zu entspannen." = "BMR.q14",               
+    "Ich kann nicht anders, als bei meiner Lieblingsmusik mitzusummen oder mitzusingen." = "BMR.q15",
+    "Bei einem Konzert fühle ich mich den MusikerInnen und dem Publikum verbunden." = "BMR.q16",   
+    "Ich gebe relativ viel Geld für Musik und verwandte Dinge aus." = "BMR.q17",        
+    "Ich bekomme manchmal Gänsehaut, wenn ich eine Melodie höre, die mir gefällt." = "BMR.q18",
+    "Musik tröstet mich." = "BMR.q19",
+    "Wenn ich ein Stück höre, das ich sehr gerne mag, muss ich im Takt klopfen oder mich bewegen." = "BMR.q20")
+
+
+FCQ_questions <-c(
+  "FCQ01" = "FCQ.q1",
+  "FCQ02" = "FCQ.q2",                                                                                            
+  "FCQ03" = "FCQ.q3",                                                                                            
+  "FCQ04" = "FCQ.q4",
+  "FCQ05" = "FCQ.q5") 
+
+read_lab_questions <- function(fname = "data/part2_lab_questions.csv"){
+  browser()
+  labq <- read_csv2(fname) %>% 
+    janitor::clean_names() %>% 
+    filter(filename != "P31-SegmentExp2.log") %>% 
+    select(-c(filename, event, trial, frame_no)) %>% 
+    rename(p_id = participant)
+  
+  q_names <- c(task_questions, segment_questions, BMRI_questions, FCQ_questions)
+  labq <- labq %>% mutate(question = q_names[q_text]) %>% select(-q_text, -q_code)
+  labq[is.na(labq$stimulus),]$stimulus <- "participant"
+  #browser()
+  p_meta <- labq %>% 
+    filter(stimulus == "participant", question %in% BMRI_questions) %>% 
+    pivot_wider(id_cols = p_id, names_from = question, values_from = rating)
+  
+  piece_meta <- labq %>% 
+    filter(question %in% c("liking", "difficulty"), stimulus != "participant") %>% 
+    pivot_wider(id_cols = c(p_id, stimulus), 
+                names_from = question, 
+                values_from = rating)
+  
+  labq <- labq %>% 
+    filter(stimulus != "participant", 
+           !(question %in% c("liking", "difficulty"))) %>% 
+    pivot_wider(id_cols = c(p_id, stimulus, time_in_s, boundary), 
+                names_from = question, 
+                values_from = rating)
+  labq %>% 
+    left_join(p_meta, by = "p_id") %>% 
+    left_join(piece_meta, by = c("p_id", "stimulus")) %>% 
+    mutate(piece = stimulus %>% str_extract("0[0-9]+") %>% as.numeric(), 
+           trial = 2, 
+           source = "lab") %>% 
+    select(-stimulus)
+}
+
 prepare_workspace <- function(){
   online_data <- list.files("data/part2/", pattern = "*.rds", full.names = T)
   map_dfr(online_data, function(x){
@@ -74,7 +149,7 @@ setup_workspace <- function(){
     fix_part2_data()
   #browser()
   ground_truth <- readr::read_csv("data/part2_ground_truth.csv")
-  
+
   boundaries_lab <- readr::read_csv("data/part2_boundaries_lab.csv") %>% 
     mutate(trial = ((trial - 1) %% 2) + 1)
   
@@ -103,12 +178,17 @@ setup_workspace <- function(){
                                        band_widths = seq(0.5, 4, .125))
     saveRDS(seg_stats, "data/seg_stats.rds")
   }
+  # labq <- read_lab_questions()
+  # 
+  # boundaries_lab_annotations <- all_boundaries %>% 
+  #   filter(source == "lab", trial == 2) %>% 
+  #   left_join(labq, by = c("time_in_s", "boundary", "p_id", "piece", "source", "trial"))
+  boundaries_lab_annotations <- readRDS("data/boundaries_lab_annotations.rds")
   assign("seg_stats", seg_stats, globalenv())
-  
   assign("all_online", all_online, globalenv())
   assign("all_boundaries", all_boundaries, globalenv())
   assign("ground_truth", ground_truth, globalenv())
-  
+  assign("boundaries_lab_annotations", boundaries_lab_annotations, globalenv())
   assign("boundaries_lab", boundaries_lab, globalenv())
   assign("metadata", metadata, globalenv())
   

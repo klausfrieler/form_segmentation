@@ -20,6 +20,7 @@ plot_gaussification <- function(data = boundaries_lab,
                                 with_markers = F,
                                 only_markers = F, 
                                 external_markers = NULL,
+                                segment_data = NULL,
                                 alpha = NULL){
   #browser()
   if(is.data.frame(data)){
@@ -34,12 +35,12 @@ plot_gaussification <- function(data = boundaries_lab,
   }
   #print(get_gaussification_peaks(combined_marker))
   #peaks <- tibble(w = get_gaussification_peaks(combined_marker))
-  q <- combined_markers %>% ggplot(aes(x = t, y = val))
+  q <-  ggplot()
   if(only_markers || !is.null(external_markers) || !is.null(threshold)){
     with_markers <- T
   }
   if(!only_markers){
-    q <- q + geom_line(color = "indianred") 
+    q <- q + geom_line(data = combined_markers, aes(x = t, y = val), color = "indianred") 
   }
   if(!is.null(external_markers)){
     if(is.data.frame(external_markers)){
@@ -99,6 +100,23 @@ plot_gaussification <- function(data = boundaries_lab,
   q <- q + scale_color_brewer(palette = "RdBu") 
   q <- q + labs(x = "Time (s)", y = "Combined segments")
   q <- q + xlim(start, end)
+  if(!is.null(segment_data)){
+    max_peak <- max(combined_markers[combined_markers$t >= start & combined_markers$t <= end,]$val)
+    q <- q + geom_rect(data = segment_data %>% 
+                         mutate(l_time = lead(time_in_s, default = 0),
+                                label = factor(label, levels = min(label):max(label)),
+                                level = factor(sprintf("Level %d", level))), 
+                       mapping = aes(xmin = l_time, 
+                                     xmax = time_in_s, 
+                                     ymin = max_peak + 5 + as.integer(factor(level))*10, 
+                                     ymax = max_peak + 10 + as.integer(factor(level))*10, 
+                                     fill = level, color = level), 
+                       color = "black", 
+                       alpha = .5)
+    q <- q + scale_fill_manual(values = rep(RColorBrewer::brewer.pal(10, "RdBu")[seq(1, 11, 3)], 30))
+    #q <- q + theme(legend.position = "none")
+  }
+  #browser()
   q  
 }
 
