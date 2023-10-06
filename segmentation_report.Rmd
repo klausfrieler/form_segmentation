@@ -189,9 +189,46 @@ It is clear, that the agreement of the theoretical prediction with the summary s
 ## Subjective ratings of segment types
 In the second trial of the lab version of the experiment, we asked participants to judge at each selected segment position as to what extent (on a scale 1 to 6) they felt that this segment marked a (1) new beginning or (2) an ending. Additionally, we asked them (3) to rate the importance of this boundary.
 
+We first had a look on overall statistics of this values. After data inspection, it seems that beginning are more strongly rated than endings. To check for systematic differences, we aggregated all beginning, ending, and importance ratings per participants and piece over all trials and all their segments and used a linear mixed model for the ratings based on type and piece interaction and subjects as random effects. Results can be found in Tab.4. In fact, 
+beginnings received overall larger values than endings and also as importance. There was no significant interaction, but a post-hoc test showed that the second generally had greater ratings.
+
+```{r seg_valuation_model, include = T}
+bla_stats <- boundaries_lab_annotations %>% 
+  group_by(p_id, piece) %>% 
+  summarise(ending = mean(SEG.ending, na.rm = T), 
+            beginning = mean(SEG.beginning, na.rm = T), 
+            importance = mean(SEG.importance, na.rm = T), .groups = "drop") 
+bla_stats_wide <- bla_stats %>% 
+  pivot_longer(-c(p_id, piece))  %>% 
+  mutate(piece = as.factor(piece)) 
+
+bla_model <- bla_stats_wide %>% lmerTest::lmer(value ~ name * piece + (1|p_id), data = .) 
+bla_model %>%   broom::tidy() %>% 
+  mutate(across(where(is.numeric), function(.x) round(.x, 3) )) %>%
+  flextable() %>% 
+  fontsize(i = NULL, j = NULL, size = 8, part = "all") %>% 
+  autofit() %>% 
+  set_caption("Tab. 4. Linear mixed model of segment valuations.")
+
+```
+
+```{r seg_valuation_differences, fig.cap = "Figure 5. Estimated means of aggregated segment valuation ratings per piece.", fig.width = 12, fig.height = 8, include = T}
+bla_model_plot <- bla_model %>% ggeffects::ggemmeans(terms = c("name","piece")) %>% 
+  mutate(group = factor(piece_names_short[group], levels = piece_names_short)) %>%  
+  ggplot(aes(x = group, y = predicted, color = x)) 
+bla_model_plot <- bla_model_plot + geom_point(position = position_dodge(width = .2)) 
+bla_model_plot <- bla_model_plot + geom_errorbar(aes(ymin = conf.low, ymax = conf.high), position = position_dodge(width = .2), width = .1)  
+bla_model_plot <- bla_model_plot + theme_bw() 
+bla_model_plot <- bla_model_plot + scale_y_continuous(n.breaks = 6, limits = c(1, 6)) 
+bla_model_plot <- bla_model_plot 
+bla_model_plot <- bla_model_plot + scale_color_manual(values = c("indianred", "darkgreen", "coral")) 
+bla_model_plot <- bla_model_plot + labs(colour = "", x = "Piece",  y = "Prediction")
+bla_model_plot
+```
+
 For analysis, we gathered the gausification peaks with a 2 s bandwidth and selected all boundary marker by participants that could be found in a 2 s window around the peak position. Next, we aggregated all importance, beginning, and ending ratings for each peak as well as the relative peak height (peak height divided by number of raters). 
 
-```{r importance_correlation, fig.cap = "Figure 5. Correlations and distribution over aggregated importance values and relative peak height.", fig.width = 12, fig.height = 8}
+```{r importance_correlation}
 annotated_peaks_sum <- find_annotated_peaks(all_boundaries, boundaries_lab_annotations, summary = T)
 #annotated_peaks_sum %>% select(rel_peak_height, beginning, ending, importance) %>% correlation::correlation()
 # pp_all <- 
@@ -222,8 +259,22 @@ cor_mat %>%
  autofit() %>%
  set_caption("Tab. 4. Significant correlation of rater's boundary assessments for both pieces and either piece alone.")
 ```
-We correlated the three assessments with each other and also with the relative peak height, for both pieces together and for each piece alone. Results can be found in Tab. 4, where for simplictiy only the significant correlations are shown.
+We correlated the three assessments with each other and also with the relative peak height, for both pieces together and for each piece alone. Results can be found in Tab. 4, where for simplicity only the significant correlations are shown.
 
-One see, that the assessment whether something ends or something new begins is in all cases strongly correlated (r about .6, .7). This is not too surprising as this is the definition of a segment. Nonetheless, this was aiming whether the participants were triggered to mark a segment boundary here by a clearly perceived ending or beginning, but it seems this is not easy to do. Perceived importance of a segment correlates with perceived beginning and endings alike, but, interestingly, only for the second piece, which drives the correlation for the combined set. On the other hand, relative peak height, i.e., interrater agreement on segment boundaries only correlates for the first piece. This all indicates that composition specific features are important alike.   
+One sees, that the assessment whether something ends or something new begins is in all cases strongly correlated (r about .6, .7). This is not too surprising as this is basically the definition of a segment. Nonetheless, this was aiming whether the participants were triggered to mark a segment boundary here by a clearly perceived ending or beginning, but it seems this is not easy to do. Perceived importance of a segment correlates with perceived beginning and endings alike, but, interestingly, only for the second piece, which drives the correlation for the combined set. On the other hand, relative peak height, i.e., inter-rater agreement on segment boundaries only correlates for the first piece. This all indicates that composition specific features are important alike.
+
+Finally, we modeled relative peak height with importance, beginning and ending ratings, using participants and piece as random effects (intercepts only, as models with slope were singular and did not improve model fit). The results can be found in Tab. 4. Importance and ending ratings contribute positively and significantly to overall agreement, whereas beginning does not. This indicates that, specifically, endings are more salient and less ambiguous than beginnings.
+
+```{r rel_peak_height}
+mod_inter <- find_annotated_peaks(all_boundaries, boundaries_lab_annotations, summary = F) %>% 
+  lmerTest::lmer(rel_peak_height ~ SEG.importance + SEG.ending + SEG.beginning + (1|p_id) + (1|piece), data = .) 
+
+mod_inter %>% broom.mixed::tidy() %>% 
+  mutate(across(where(is.numeric), function(.x) round(.x, 3) )) %>%
+  flextable() %>% 
+  fontsize(i = NULL, j = NULL, size = 8, part = "all") %>% 
+  autofit() %>% 
+  set_caption("Tab. 2. Linear mixed model for relative peak height (as a proxy for interrater agreement).")
+```
 
 

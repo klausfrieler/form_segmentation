@@ -604,6 +604,46 @@ compare_segmentations <- function(segs = boundaries_lab,
   }
 }
 
+get_all_dtw_distances_by_particpant <- function(segs = all_boundaries, 
+                                             gt = ground_truth, 
+                                             theory = 1,
+                                             max_level = 2,
+                                             start = 0, 
+                                             end = NULL){
+  gt_boundaries <- gt_boundaries <- gt %>% 
+    filter(level <= max_level, 
+           theory == !!theory)
+           
+  map_dfr(1:2, function(piece){
+    if(is.null(end)){
+      end <- piece_durations[piece] + 1
+    }
+    gt_boundaries <- gt %>% 
+      filter(level <= max_level, 
+             piece == !!piece, 
+             theory == !!theory, 
+             time_in_s >= start, 
+             time_in_s <= end) %>% 
+      pull(time_in_s)
+    ids <- unique(segs$p_id)
+    
+    segs <- segs %>% 
+      filter(piece == !!piece) 
+    
+    map_dfr(ids, function(id){
+      p_data  <- segs %>% filter(p_id == id) 
+      trials <- p_data %>% pull(trial) %>% unique()
+      map_dfr(trials, function(tr){
+        part_boundaries <- p_data %>% 
+          filter(trial == tr) %>% 
+          pull(time_in_s) 
+        best <- get_best_alignment(part_boundaries, gt_boundaries)
+        tibble(p_id = id, trial = tr, norm_dist = best$summary$norm_dist[1])  
+      })
+    }) %>% mutate(piece = piece, level = max_level, theory = theory)
+  })
+}
+
 get_baseline <- function(boundary_data, ground_truth, size, piece, max_level, start, end, sigma, threshold, summary = T){
   se <- function(x, na.rm = FALSE) {
     if (na.rm) x <- na.omit(x)
