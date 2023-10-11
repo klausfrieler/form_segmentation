@@ -156,7 +156,7 @@ setup_workspace <- function(){
   metadata <- bind_rows(
     readr::read_csv("data/part2_metadata_lab.csv") %>% 
       mutate(source = "lab", 
-             GMS.general = GMS.general/19),
+             GMS.general = GMS.general/18),
     readr::read_csv("data/part2_metadata_online.csv") %>% 
       mutate(source = "online", 
              piece = str_extract(stimulus, "01|02") %>% as.integer()),

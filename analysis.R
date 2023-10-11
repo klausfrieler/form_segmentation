@@ -13,6 +13,12 @@ messagef <- function(...) message(sprintf(...))
 printf <- function(...) print(sprintf(...))
 select <- dplyr::select
 
+get_stats <- function(df, var, stat, digits = 1){
+  s <- summary(df[[var]]) %>% round(digits) %>% as.numeric()
+  sd <- sd(df[[var]], na.rm = T) %>% round(digits)
+  list("min" = s[1], "q25" = s[2], "median" = s[3], "mean" = s[4], "q75" = s[5], "max" = s[6], sd = sd, 
+       "range_str" = sprintf("%.0f to %.0f", s[1], s[5]))
+}
 remove_doublets<- function(str){
   str <- as.character(str)
   str[str == lag(str)] <- ""

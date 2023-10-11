@@ -24,9 +24,17 @@ piece_names_short <- c("Louise Farrenc", "John K. Paine")
 # Method
 In an online and a lab experiment, participant were asked to mark beginning or endings  in two pieces of classical music while listening to the piece. These markers delineate sections or segments, and a set of markers is called a *segmentation* of the musical piece. In the lab version, participants  were asked further questions on the nature of their segmentation marks, which are not considered here. 
 
-There were a total of `r n_distinct(metadata$p_id)` participants (`r as.numeric(table(metadata$gender)["female"])` female), with `r n_distinct(metadata[metadata$source == "lab",]$p_id)` in the lab experiment.  and `r n_distinct(metadata[metadata$source == "online",]$p_id)` in the online version. Mean age was `r round(mean(metadata$age, na.rm = T), 1)` (SD = `r round(sd(metadata$age, na.rm = T),1)`). Mean GoldMSI values was `r round(mean(metadata$GMS.general, na.rm = T), 1)` (SD = `r round(sd(metadata$GMS.general, na.rm = T), 1)`), which is about the German averages (Schaal et al.)
+There were a total of `r n_distinct(metadata$p_id)` participants (`r as.numeric(table(metadata$gender)["female"])` female), with `r n_distinct(metadata[metadata$source == "lab",]$p_id)` in the lab experiment.  and `r n_distinct(metadata[metadata$source == "online",]$p_id)` in the online version. 
 
-We excluded  `r n_distinct(metadata$p_id) - n_distinct(all_online$p_id)`  participants from the online version due to missing data (e.g., no segments were marked).
+Mean age was `r get_stats(metadata, "age")["mean"]` (SD = `r get_stats(metadata, "age")["sd"]`, 
+range `r get_stats(metadata, "age")["min"]` to `r get_stats(metadata, "age")["max"]`). 
+
+Mean GoldMSI General score was `r get_stats(metadata, "GMS.general")["mean"]` (SD = `r get_stats(metadata, "GMS.general")["sd"]`), which is about the German averages (Schaal et al.)
+
+For the online group, mean age was `r get_stats(metadata %>% filter(source == "online"), "age")["mean"]` (SD = `r get_stats(metadata%>% filter(source == "online"), "age")["sd"]`, 
+range `r get_stats(metadata%>% filter(source == "online"), "age")["min"]` to `r get_stats(metadata %>% filter(source == "online"), "age")["max"]`), and mean GoldMSI General score was `r get_stats(metadata %>% filter(source == "online"), "GMS.general")["mean"]` (SD = `r get_stats(metadata %>% filter(source == "online"), "GMS.general")["sd"]`), which is about the German average (Schaal et al.)
+
+We excluded  `r n_distinct(metadata[metadata$source == "online",]$p_id) - n_distinct(all_online$p_id)`  participants from the online version due to missing data (e.g., no segments were marked).
 
 
 ## Analysis
