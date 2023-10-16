@@ -89,7 +89,7 @@ mod <- all_boundaries %>%
   group_by(p_id, trial, piece, source) %>% 
   
   summarise(m = log(mean(diff(time_in_s))), .groups = "drop") %>% 
-  lmerTest::lmer(log(m) ~ 0 + piece * (trial + source) + (1|p_id), data = .) 
+  lmerTest::lmer(m ~ 1 + piece * (trial + source) + (1|p_id), data = .) 
 
 mod %>% broom.mixed::tidy() %>% 
   mutate(across(where(is.numeric), function(.x) round(.x, 3) )) %>%
